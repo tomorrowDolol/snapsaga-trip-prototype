@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1F3336">
+<title>拾光 SnapSaga · 出行原型</title>
+<style>
+  :root{
+    --bg:#F7F3EA; --ink:#1F3336; --soft:#5C6E70; --accent:#FF8A3D; --teal:#2C7A7B;
+    --paper:#fff; --line:rgba(31,51,54,.14); --card:#FFFDF8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.6; overscroll-behavior:none;
+    display:flex; flex-direction:column;
+  }
+  button{font-family:inherit; border:none; cursor:pointer; background:none; color:inherit}
+  input,select{font-family:inherit; font-size:14px; color:var(--ink)}
+
+  /* 顶部 */
+  header.app{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
+    background:var(--ink); color:#fff; flex:0 0 auto;
+  }
+  header.app .logo{font-weight:800; letter-spacing:1px; font-size:16px}
+  header.app .logo em{font-style:normal; color:var(--accent)}
+  header.app .sub{font-size:10px; opacity:.65; letter-spacing:2px}
+  .iconbtn{font-size:20px; padding:6px 10px; color:#fff; opacity:.9}
+
+  /* 非安全上下文横幅 */
+  .ctx-banner{
+    display:none; background:#FFE9D6; color:#8A4A12; font-size:12px; padding:8px 14px; line-height:1.5;
+  }
+  .ctx-banner.show{display:block}
+
+  /* 主区 */
+  main{flex:1 1 auto; overflow:hidden; position:relative}
+  .view{position:absolute; inset:0; display:none; flex-direction:column; overflow:hidden}
+  .view.on{display:flex}
+
+  /* ============ 取景 ============ */
+  #camWrap{position:relative; flex:1; background:#0e1617; overflow:hidden}
+  #video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none}
+  #camPlaceholder{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; color:#9fb3b4; text-align:center; padding:30px;
+  }
+  #camPlaceholder .big{font-size:44px}
+  #camPlaceholder p{font-size:13px; max-width:280px}
+  #startCam{
+    background:var(--accent); color:#fff; font-weight:700; font-size:15px;
+    padding:12px 30px; border-radius:999px;
+  }
+  /* 网格叠加 */
+  #gridLayer{position:absolute; inset:0; pointer-events:none; z-index:5; display:none}
+  #gridLayer svg{width:100%; height:100%}
+  /* 水平仪 */
+  #levelHud{
+    position:absolute; top:calc(env(safe-area-inset-top) + 8px); left:50%; transform:translateX(-50%);
+    z-index:8; display:none; align-items:center; gap:8px;
+    background:rgba(16,28,29,.55); backdrop-filter:blur(6px); border-radius:999px; padding:6px 14px;
+    color:#fff; font-size:12px; font-weight:600;
+  }
+  #levelDot{width:10px; height:10px; border-radius:50%; background:#ff5d5d; transition:background .2s}
+  #levelDot.ok{background:#5dd88b}
+  /* 黄金时刻 */
+  #sunBar{
+    position:absolute; left:12px; right:12px; bottom:12px; z-index:8;
+    background:rgba(16,28,29,.55); backdrop-filter:blur(8px); border-radius:14px;
+    padding:10px 14px; color:#fff; display:flex; align-items:center; gap:10px; font-size:12px;
+  }
+  #sunBar .ico{font-size:20px}
+  #sunBar .t1{font-weight:800; font-size:12.5px}
+  #sunBar .t2{opacity:.8; font-size:11px}
+  /* 场景选择 */
+  #sceneBar{
+    flex:0 0 auto; display:flex; gap:8px; overflow-x:auto; padding:10px 12px;
+    background:var(--card); border-top:1px solid var(--line); scrollbar-width:none;
+  }
+  #sceneBar::-webkit-scrollbar{display:none}
+  .scene-chip{
+    flex:0 0 auto; font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:999px;
+    background:var(--bg); border:1px solid var(--line); color:var(--soft);
+  }
+  .scene-chip.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  #sceneTip{
+    flex:0 0 auto; background:var(--card); padding:10px 16px 14px; font-size:12.5px; color:var(--soft);
+    border-top:1px solid var(--line); min-height:44px;
+  }
+  #sceneTip b{color:var(--teal)}
+  /* 快门行 */
+  #shutterRow{
+    flex:0 0 auto; display:flex; align-items:center; justify-content:space-around;
+    padding:12px 24px calc(env(safe-area-inset-bottom) + 14px); background:var(--card);
+  }
+  .side-btn{width:52px; text-align:center; font-size:10.5px; color:var(--soft)}
+  .side-btn .ic{font-size:22px; display:block; margin-bottom:2px}
+  #shutter{
+    width:68px; height:68px; border-radius:50%; border:4px solid var(--ink); background:#fff;
+    box-shadow:0 4px 14px rgba(31,51,54,.25); position:relative;
+  }
+  #shutter:active{transform:scale(.92)}
+  #shutter::after{content:""; position:absolute; inset:6px; border-radius:50%; background:var(--accent)}
+  #flash{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:50; transition:opacity .12s}
+
+  /* ============ 通用列表页 ============ */
+  .page-head{padding:14px 16px 8px}
+  .page-head h2{font-size:18px}
+  .page-head p{font-size:12px; color:var(--soft)}
+  .empty{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; color:var(--soft); font-size:13.5px; text-align:center; padding:30px;
+  }
+  .empty .big{font-size:42px; opacity:.7}
+
+  /* 胶卷 */
+  #filmGrid{flex:1; overflow-y:auto; padding:4px 12px 20px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-content:start}
+  .film-cell{position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; background:#e8e2d5}
+  .film-cell img{width:100%; height:100%; object-fit:cover}
+  .film-cell .ts{position:absolute; left:5px; bottom:4px; font-size:9px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  .film-cell.sel{outline:3px solid var(--accent); outline-offset:-3px}
+  .film-cell .sel-mark{position:absolute; right:5px; top:5px; width:20px; height:20px; border-radius:50%;
+    background:var(--accent); color:#fff; font-size:12px; display:none; align-items:center; justify-content:center}
+  .film-cell.sel .sel-mark{display:flex}
+  #filmActions{
+    flex:0 0 auto; display:flex; gap:10px; padding:12px 16px calc(env(safe-area-inset-bottom) + 14px);
+    background:var(--card); border-top:1px solid var(--line);
+  }
+  .btn{
+    flex:1; padding:13px; border-radius:14px; font-size:14.5px; font-weight:800; text-align:center;
+    background:var(--bg); color:var(--soft); border:1px solid var(--line);
+  }
+  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .btn.teal{background:var(--teal); color:#fff; border-color:var(--teal)}
+  .btn:disabled{opacity:.45}
+
+  /* 拍立得工坊 */
+  #polaStage{flex:1; display:flex; align-items:center; justify-content:center; padding:14px; overflow:hidden}
+  #polaBox{width:min(78vw,330px); background:#fff; padding:4.2% 4.2% 0; border-radius:3px;
+    box-shadow:0 16px 40px rgba(31,51,54,.28); transform:rotate(-1.6deg); position:relative}
+  #polaImgWrap{position:relative; overflow:hidden; background:#e8e2d5; transition:filter 2.6s ease, opacity 2.6s ease}
+  #polaImgWrap canvas{width:100%; height:auto; display:block}
+  .polaroid-developing #polaImgWrap{filter:brightness(2.4) contrast(.3) saturate(.4); opacity:.2}
+  #polaCap{
+    display:flex; align-items:center; justify-content:center;
+    padding:6px 8px; font-family:"Kaiti SC","STKaiti","Marker Felt",cursive; font-size:14px; color:#6B5B4A;
+    text-align:center;
+  }
+  .pola-bar{
+    flex:0 0 auto; background:var(--card); border-top:1px solid var(--line);
+    padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);
+  }
+  .pola-bar .row{display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap}
+  .pola-bar label{font-size:12px; color:var(--soft); flex:0 0 auto}
+  .seg{display:flex; background:var(--bg); border-radius:10px; padding:3px; gap:3px}
+  .seg button{font-size:12px; font-weight:700; padding:6px 12px; border-radius:8px; color:var(--soft)}
+  .seg button.on{background:var(--ink); color:#fff}
+  #polaNote{flex:1; min-width:120px; border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--bg)}
+  .pola-actions{display:flex; gap:10px}
+  .dice{flex:0 0 auto; width:46px; background:var(--bg); border:1px solid var(--line); border-radius:12px; font-size:18px}
+
+  /* 修图 */
+  #editStage{flex:1; display:flex; align-items:center; justify-content:center; padding:14px; position:relative; overflow:hidden}
+  #editStage canvas, #editStage img{max-width:100%; max-height:100%; border-radius:12px; box-shadow:0 12px 30px rgba(31,51,54,.2)}
+  #aiBusy{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+    background:rgba(247,243,234,.88); backdrop-filter:blur(4px); z-index:10; text-align:center; padding:20px;
+  }
+  #aiBusy.show{display:flex}
+  .filmstrip-loader{display:flex; gap:4px}
+  .filmstrip-loader i{width:8px; height:16px; background:var(--ink); opacity:.25; border-radius:2px; animation:flick 1s infinite}
+  .filmstrip-loader i:nth-child(2){animation-delay:.15s}
+  .filmstrip-loader i:nth-child(3){animation-delay:.3s}
+  .filmstrip-loader i:nth-child(4){animation-delay:.45s}
+  @keyframes flick{0%,100%{opacity:.2}50%{opacity:.9}}
+  .edit-bar{flex:0 0 auto; background:var(--card); border-top:1px solid var(--line);
+    padding:10px 16px calc(env(safe-area-inset-bottom) + 12px)}
+  #styleRow{display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none}
+  #styleRow::-webkit-scrollbar{display:none}
+  .style-chip{flex:0 0 auto; font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:999px;
+    background:var(--bg); border:1px solid var(--line); color:var(--soft)}
+  .style-chip.on{background:var(--teal); color:#fff; border-color:var(--teal)}
+  .slider-row{display:flex; align-items:center; gap:10px; margin-top:4px}
+  .slider-row label{font-size:12px; color:var(--soft); flex:0 0 auto}
+  input[type=range]{flex:1; accent-color:var(--accent)}
+  .edit-actions{display:flex; gap:10px; margin-top:10px}
+  .edit-actions .btn{padding:11px}
+
+  /* ============ 设置抽屉 ============ */
+  #settingsMask{position:fixed; inset:0; background:rgba(16,28,29,.5); z-index:98; display:none}
+  #settingsMask.show{display:block}
+  #settings{
+    position:fixed; left:0; right:0; bottom:0; z-index:99; background:var(--card);
+    border-radius:22px 22px 0 0; max-height:86vh; overflow-y:auto; display:none;
+    padding:8px 20px calc(env(safe-area-inset-bottom) + 20px); transform:translateY(100%); transition:transform .3s;
+  }
+  #settings.show{display:block; transform:none}
+  #settings .grab{width:44px; height:5px; border-radius:99px; background:var(--line); margin:6px auto 12px}
+  #settings h3{font-size:16px; margin:18px 0 8px}
+  #settings h3:first-of-type{margin-top:4px}
+  #settings p.desc{font-size:12px; color:var(--soft); margin-bottom:8px}
+  .field{display:flex; gap:8px; margin-bottom:8px}
+  .field input{flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); min-width:0}
+  .field input:focus{outline:2px solid rgba(255,138,61,.4)}
+  .mini{font-size:12.5px; font-weight:700; padding:9px 14px; border-radius:10px; background:var(--teal); color:#fff; flex:0 0 auto}
+  .mini.ghost{background:var(--bg); color:var(--soft); border:1px solid var(--line)}
+
+  /* Toast */
+  #toast{
+    position:fixed; left:50%; bottom:110px; transform:translateX(-50%) translateY(20px); z-index:120;
+    background:rgba(31,51,54,.94); color:#fff; font-size:13px; padding:10px 18px; border-radius:999px;
+    opacity:0; pointer-events:none; transition:.25s; max-width:86vw; text-align:center;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  /* 底部导航 */
+  nav.bottom{
+    flex:0 0 auto; display:flex; background:var(--card); border-top:1px solid var(--line);
+    padding:6px 8px calc(env(safe-area-inset-bottom) + 6px);
+  }
+  nav.bottom button{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:1px;
+    font-size:10.5px; color:var(--soft); padding:5px 0;
+  }
+  nav.bottom button .ic{font-size:21px}
+  nav.bottom button.on{color:var(--accent); font-weight:800}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div>
+    <div class="logo">拾光<em>·</em>SnapSaga</div>
+    <div class="sub">TRIP PROTOTYPE v0.1</div>
+  </div>
+  <button class="iconbtn" id="btnSettings" title="设置">⚙︎</button>
+</header>
+
+<div class="ctx-banner" id="ctxBanner">
+  ⚠️ 当前不是 HTTPS 环境，浏览器不允许打开相机。本地调试或出游使用请先按交付说明部署（本地 https 或静态托管），刷新后此提示消失。
+</div>
+
+<main>
+  <!-- ========= 取景 ========= -->
+  <section class="view on" id="view-cam">
+    <div id="camWrap">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="camPlaceholder">
+        <div class="big">📷</div>
+        <p>构图网格、水平仪、黄金时刻提醒——出游时帮你「拍对」。<br>全部在本机运行，照片不上传。</p>
+        <button id="startCam">打开相机</button>
+      </div>
+      <div id="gridLayer"></div>
+      <div id="levelHud"><span id="levelDot"></span><span id="levelText">水平仪未开启</span></div>
+      <div id="sunBar">
+        <span class="ico">🌅</span>
+        <div>
+          <div class="t1" id="sunTitle">黄金时刻：点击开启</div>
+          <div class="t2" id="sunDetail">使用定位或手动填经纬度（设置里）</div>
+        </div>
+      </div>
+      <div id="flash"></div>
+    </div>
+    <div id="sceneBar"></div>
+    <div id="sceneTip">选一个场景，获得构图建议与推荐网格。<b>提示</b>会显示在这里。</div>
+    <div id="shutterRow">
+      <button class="side-btn" id="btnLevel"><span class="ic">🧭</span>水平仪</button>
+      <button id="shutter" title="拍照"></button>
+      <button class="side-btn" id="btnSwitch"><span class="ic">🔄</span>翻转</button>
+    </div>
+  </section>
+
+  <!-- ========= 胶卷 ========= -->
+  <section class="view" id="view-film">
+    <div class="page-head"><h2>🎞 胶卷</h2><p>点选照片（可多选）送去拍立得或修图；长按可删除。全部存在本机。</p></div>
+    <div id="filmGrid"></div>
+    <div id="emptyFilm" class="empty"><div class="big">🎞</div>还没有照片<br>去「取景」拍第一张吧</div>
+    <div id="filmActions">
+      <button class="btn" id="btnClearSel">取消选择</button>
+      <button class="btn primary" id="btnToPola">🤍 做拍立得</button>
+      <button class="btn teal" id="btnToEdit">🎨 去修图</button>
+    </div>
+  </section>
+
+  <!-- ========= 拍立得 ========= -->
+  <section class="view" id="view-pola">
+    <div class="page-head"><h2>🤍 拍立得工坊</h2><p>白框 + 颗粒 + 日期戳 + 一句手写注记，10 秒显影出片。</p></div>
+    <div id="polaStage">
+      <div id="polaBox" class="polaroid-developing">
+        <div id="polaImgWrap"><canvas id="polaCanvas"></canvas></div>
+        <div id="polaCap">…</div>
+      </div>
+    </div>
+    <div class="pola-bar">
+      <div class="row">
+        <label>胶片</label>
+        <div class="seg" id="filmSeg">
+          <button data-f="600" class="on">600</button>
+          <button data-f="sx70">SX-70</button>
+          <button data-f="wide">宽幅</button>
+        </div>
+        <button class="dice" id="btnNoteDice" title="换一句">🎲</button>
+      </div>
+      <div class="row">
+        <label>注记</label>
+        <input id="polaNote" placeholder="写一句，或点骰子来一句">
+      </div>
+      <div class="pola-actions">
+        <button class="btn" id="btnPolaRedo">换显影</button>
+        <button class="btn primary" id="btnPolaSave">保存 / 分享</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========= 修图 ========= -->
+  <section class="view" id="view-edit">
+    <div class="page-head"><h2>🎨 主题修图</h2><p>本地滤镜离线即用；填了 API Key（设置里）可调 gpt-image-2 真重绘。</p></div>
+    <div id="editStage"><div class="empty" id="editEmpty"><div class="big">🎨</div>先在「胶卷」选一张照片</div></div>
+    <div id="aiBusy"><div class="filmstrip-loader"><i></i><i></i><i></i><i></i></div><div id="aiBusyText" style="font-size:13px;color:var(--soft)">暗房里正在重绘…约 20–60 秒</div></div>
+    <div class="edit-bar">
+      <div id="styleRow"></div>
+      <div class="slider-row"><label>强度</label><input type="range" id="editStrength" min="0" max="100" value="70"><span id="strengthVal" style="font-size:12px;color:var(--soft);width:34px">70%</span></div>
+      <div class="edit-actions">
+        <button class="btn" id="btnEditSave">保存结果</button>
+        <button class="btn teal" id="btnEditAI">✨ AI 重绘</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 设置 -->
+<div id="settingsMask"></div>
+<div id="settings">
+  <div class="grab"></div>
+  <h3>🌅 黄金时刻</h3>
+  <p class="desc">计算日出日落与黄金拍摄窗口，全程离线。</p>
+  <div class="field">
+    <input id="latInput" inputmode="decimal" placeholder="纬度 lat，如 30.65">
+    <input id="lonInput" inputmode="decimal" placeholder="经度 lon，如 104.07">
+    <button class="mini" id="btnGeo">定位</button>
+  </div>
+  <button class="mini ghost" id="btnSunOn">启用黄金时刻提醒</button>
+
+  <h3>✨ AI 重绘（可选）</h3>
+  <p class="desc">正式版走自家网关，原型允许直连体验。Key 只存本机 localStorage。无 Key 时本地滤镜全部可用。</p>
+  <div class="field"><input id="aiBase" placeholder="API Base，如 https://api.openai.com/v1"></div>
+  <div class="field"><input id="aiKey" type="password" placeholder="API Key（sk-…）"></div>
+  <div class="field"><input id="aiModel" placeholder="模型名，默认 gpt-image-2"></div>
+  <div class="field"><button class="mini" id="btnAiTest">测试连通</button><button class="mini ghost" id="btnAiSave">保存</button></div>
+
+  <h3>🗂 数据</h3>
+  <div class="field"><button class="mini ghost" id="btnWipe">清空全部照片与设置</button></div>
+  <p class="desc" style="margin-top:10px">拾光 SnapSaga 出行原型 · 照片仅存本机 IndexedDB · AI 重绘仅在主动点击时把所选照片发往你配置的服务</p>
+</div>
+
+<nav class="bottom">
+  <button class="on" data-v="cam"><span class="ic">📷</span>取景</button>
+  <button data-v="film"><span class="ic">🎞</span>胶卷</button>
+  <button data-v="pola"><span class="ic">🤍</span>拍立得</button>
+  <button data-v="edit"><span class="ic">🎨</span>修图</button>
+</nav>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ================= 工具 ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let toastTimer=null;
+function toast(msg,ms=2200){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
+}
+function fmtDate(d){const p=n=>String(n).padStart(2,'0');return `'${String(d.getFullYear()).slice(2)}.${p(d.getMonth()+1)}.${p(d.getDate())}`}
+function fmtTime(d){const p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())}`}
+
+/* ================= 安全上下文 ================= */
+if(!window.isSecureContext){ $('#ctxBanner').classList.add('show'); }
+
+/* ================= 视图切换 ================= */
+$$('nav.bottom button').forEach(b=>b.addEventListener('click',()=>{
+  $$('nav.bottom button').forEach(x=>x.classList.remove('on'));
+  $$('.view').forEach(v=>v.classList.remove('on'));
+  b.classList.add('on');
+  $('#view-'+b.dataset.v).classList.add('on');
+  if(b.dataset.v==='film') renderFilm();
+}));
+
+/* ================= 数据层 IndexedDB ================= */
+const DB={db:null,
+  open(){return new Promise((res,rej)=>{
+    const r=indexedDB.open('snapsaga',1);
+    r.onupgradeneeded=e=>{e.target.result.createObjectStore('photos',{keyPath:'id'})};
+    r.onsuccess=e=>{DB.db=e.target.result;res()};
+    r.onerror=()=>rej(r.error);
+  })},
+  put(rec){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').put(rec);t.oncomplete=res;t.onerror=()=>rej(t.error)})},
+  all(){return new Promise((res,rej)=>{const r=DB.db.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>res(r.result.sort((a,b)=>b.ts-a.ts));r.onerror=()=>rej(r.error)})},
+  del(id){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').delete(id);t.oncomplete=res;t.onerror=()=>rej(t.error)})},
+  clear(){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').clear();t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+};
+const PHOTOS=[]; const selected=new Set();
+
+/* ================= 相机 ================= */
+const cam={stream:null, facing:'environment'};
+async function camStart(){
+  try{
+    if(cam.stream) cam.stream.getTracks().forEach(t=>t.stop());
+    cam.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:cam.facing,width:{ideal:1920},height:{ideal:1080}},audio:false});
+    const v=$('#video'); v.srcObject=cam.stream; v.style.display='block';
+    $('#camPlaceholder').style.display='none';
+  }catch(e){
+    toast('相机打开失败：'+(e.name==='NotAllowedError'?'未授权相机权限':e.message),3200);
+  }
+}
+function camSwitch(){ cam.facing=cam.facing==='environment'?'user':'environment'; camStart(); }
+async function capture(){
+  const v=$('#video');
+  if(!cam.stream||!v.videoWidth){ toast('相机还没就绪'); return; }
+  $('#flash').style.opacity=.9; setTimeout(()=>$('#flash').style.opacity=0,120);
+  const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));
+  await addPhoto(blob);
+  toast('已收进胶卷 🎞');
+}
+async function addPhoto(blob){
+  const rec={id:'p'+Date.now()+Math.random().toString(36).slice(2,6), blob, ts:Date.now()};
+  await DB.put(rec); PHOTOS.unshift(rec); renderFilm();
+}
+
+/* ================= 网格叠加 ================= */
+const SCENES=[
+  {k:'general',n:'通用',grid:'thirds',tip:'<b>通用</b>：把主体放在三分交点上，地平线贴 1/3 线。'},
+  {k:'lake',n:'湖泊',grid:'thirds',tip:'<b>湖泊</b>：地平线放低留 2/3 给天空与倒影；蹲低找前景（栈道、石头）拉纵深。'},
+  {k:'mountain',n:'山野',grid:'thirds',tip:'<b>山野</b>：山脊线贴下 1/3；等云影掠过山体再按快门，层次立刻不一样。'},
+  {k:'street',n:'老街',grid:'spiral',tip:'<b>老街</b>：站路中间用对称或黄金螺旋引导线；等一个行人入画当比例尺。'},
+  {k:'night',n:'夜景',grid:'thirds',tip:'<b>夜景</b>：找光源当主角（灯牌/落日余光），手臂夹紧稳住手机，多按两张挑一张。'},
+  {k:'beach',n:'海滩',grid:'thirds',tip:'<b>海滩</b>：海平线务必水平；人物别顶天立地，脚贴画面下缘留天空。'},
+  {k:'portrait',n:'人像',grid:'spiral',tip:'<b>人像</b>：脸朝的方向留白；镜头稍低仰拍显腿长；逆光开人像模式或点脸对焦拉亮度。'},
+  {k:'food',n:'美食',grid:'spiral',tip:'<b>美食</b>：45° 俯角或正俯拍；挪动餐盘找个纯色背景，靠近拍。'},
+];
+let sceneIdx=0, gridMode='thirds';
+function gridSVG(mode){
+  if(mode==='spiral'){
+    return `<svg viewBox="0 0 100 100" preserveAspectRatio="none">
+      <g stroke="rgba(255,255,255,.45)" stroke-width=".35" fill="none">
+        <path d="M38.2,0 V100 M61.8,0 V100 M0,38.2 H100 M0,61.8 H100"/>
+        <path d="M100,61.8 L38.2,61.8 A23.6,23.6 0 0 1 61.8,38.2 L61.8,80.7 A42.5,42.5 0 0 1 19.3,38.2 L19.3,15.6 A76,76 0 0 1 95.3,15.6" stroke="rgba(255,138,61,.6)"/>
+      </g></svg>`;
+  }
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none">
+    <g stroke="rgba(255,255,255,.45)" stroke-width=".35">
+      <line x1="33.3" y1="0" x2="33.3" y2="100"/><line x1="66.6" y1="0" x2="66.6" y2="100"/>
+      <line x1="0" y1="33.3" x2="100" y2="33.3"/><line x1="0" y1="66.6" x2="100" y2="66.6"/>
+    </g></svg>`;
+}
+function renderScenes(){
+  $('#sceneBar').innerHTML=SCENES.map((s,i)=>`<button class="scene-chip ${i===sceneIdx?'on':''}" data-i="${i}">${s.n}</button>`).join('');
+  $('#sceneTip').innerHTML=SCENES[sceneIdx].tip;
+  if(SCENES[sceneIdx].k==='general'){ gridMode='thirds'; }
+  $$('#sceneBar .scene-chip').forEach(b=>b.addEventListener('click',()=>{
+    sceneIdx=+b.dataset.i; gridMode=SCENES[sceneIdx].grid; renderScenes(); applyGrid();
+  }));
+}
+function applyGrid(){
+  const g=$('#gridLayer');
+  if(cam.stream){ g.innerHTML=gridSVG(gridMode); g.style.display='block'; }
+  else { g.style.display='none'; }
+}
+
+/* ================= 水平仪 ================= */
+let levelOn=false;
+function onOrient(e){
+  if(!levelOn) return;
+  const gamma=e.gamma||0;
+  const deviation=Math.round(Math.abs(gamma));
+  const ok=deviation<=2;
+  $('#levelDot').className=ok?'ok':'';
+  $('#levelText').textContent=ok?'水平 ✓':'倾斜 '+deviation+'°';
+}
+async function toggleLevel(){
+  if(levelOn){ levelOn=false; $('#levelHud').style.display='none'; return; }
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+      const r=await DeviceOrientationEvent.requestPermission();
+      if(r!=='granted'){ toast('未授权方向传感器'); return; }
+    }
+    levelOn=true; $('#levelHud').style.display='flex';
+    window.addEventListener('deviceorientation',onOrient);
+    toast('水平仪已开启：把手机贴在竖直或水平面上校平');
+  }catch(e){ toast('此设备不支持方向传感器'); }
+}
+
+/* ================= 太阳计算（精简 SunCalc 核心算法） ================= */
+const rad=Math.PI/180, dayMs=86400000, J1970=2440588, J2000=2451545;
+function toJulian(date){return date.valueOf()/dayMs-0.5+J1970}
+function toDays(date){return toJulian(date)-J2000}
+function solarMeanAnomaly(d){return rad*(357.5291+0.98560028*d)}
+function eclipticLongitude(M){const C=rad*(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M));const P=rad*102.9372;return M+C+P+Math.PI}
+function declination(l,b){const e=rad*23.4397;return Math.asin(Math.sin(b)*Math.cos(e)+Math.cos(b)*Math.sin(e)*Math.sin(l))}
+function julianCycle(d,lw){return Math.round(d-0.0009-(lw/(2*Math.PI)))}
+function approxTransit(Ht,lw,n){return 0.0009+(Ht+lw)/(2*Math.PI)+n}
+function solarTransitJ(ds,M,L){return J2000+ds+0.0053*Math.sin(M)-0.0069*Math.sin(2*L)}
+function hourAngle(h,phi,d){return Math.acos((Math.sin(h)-Math.sin(phi)*Math.sin(d))/(Math.cos(phi)*Math.cos(d)))}
+function getSetJ(h,lw,phi,dec,n,M,L){const w=hourAngle(h,phi,dec),a=approxTransit(w,lw,n);return solarTransitJ(a,M,L)}
+function sunTimes(date,lat,lng){
+  const lw=rad*-lng, phi=rad*lat, d=toDays(date),
+        n=julianCycle(d,lw), ds=approxTransit(0,lw,n),
+        M=solarMeanAnomaly(ds), L=eclipticLongitude(M), dec=declination(L,0),
+        Jnoon=solarTransitJ(ds,M,L),
+        h0=rad*-0.833;
+  const Jset=getSetJ(h0,lw,phi,dec,n,M,L), Jrise=Jnoon-(Jset-Jnoon);
+  const JgoldDown=getSetJ(rad*-4,lw,phi,dec,n,M,L),   // 太阳降到 -4°（晚黄金结束）
+        JgoldUp=Jnoon-(JgoldDown-Jnoon),              // 太阳升到 -4°（晨黄金开始）
+        J6down=getSetJ(rad*6,lw,phi,dec,n,M,L),       // 太阳降到 +6°（晚黄金开始）
+        J6up=Jnoon-(J6down-Jnoon);                    // 太阳升到 +6°（晨黄金结束）
+  const F=j=>new Date((j+0.5-J1970)*dayMs);
+  return {
+    sunrise:F(Jrise), sunset:F(Jset),
+    morningStart:F(JgoldUp), morningEnd:F(J6up),
+    eveningStart:F(J6down), eveningEnd:F(JgoldDown)
+  };
+}
+let geo={lat:null,lon:null};
+function loadGeo(){try{const s=JSON.parse(localStorage.getItem('snapsaga_geo')||'null'); if(s)geo=s}catch(e){}}
+function saveGeo(){localStorage.setItem('snapsaga_geo',JSON.stringify(geo)); renderSun();}
+function renderSun(){
+  const t=$('#sunTitle'), d=$('#sunDetail');
+  if(geo.lat==null){ t.textContent='黄金时刻：未设置地点'; d.textContent='设置里点「定位」或手填经纬度'; return; }
+  const now=new Date();
+  const st=sunTimes(now,geo.lat,geo.lon);
+  const stTm=sunTimes(new Date(now.valueOf()+dayMs),geo.lat,geo.lon);
+  const windows=[
+    {a:st.morningStart,b:st.morningEnd,c:'清晨'},
+    {a:st.eveningStart,b:st.eveningEnd,c:'傍晚'}
+  ];
+  let msg=null;
+  for(const w of windows){
+    if(now>=w.a&&now<=w.b){ msg=['☀️ 黄金时刻进行中！', `至 ${fmtTime(w.b)}（${w.c}光）`]; break; }
+    if(now<w.a){ msg=[`🌅 ${w.c}黄金时刻 ${fmtTime(w.a)} 开始`, `日出 ${fmtTime(st.sunrise)} · 日落 ${fmtTime(st.sunset)}`]; break; }
+  }
+  if(!msg){ msg=[`🌙 今日黄金时刻已结束`, `明日 ${fmtTime(stTm.morningStart)} 起晨光 · 傍晚 ${fmtTime(stTm.eveningStart)} 开始`]; }
+  t.textContent=msg[0]; d.textContent=msg[1];
+}
+setInterval(renderSun,30000);
+
+/* ================= 拍立得 ================= */
+const NOTES=[
+  '把今天存进相纸里','风是甜的，云是软的','慢一点，再慢一点','这一刻值得慢门显影',
+  '山川湖海，都是回礼','出发本身就是意义','今天的晚霞不营业也好看','我们和落日都准时',
+  '走神的一秒被拍下来了','包里装着整个夏天','路比地图长，快乐也是','下一次还来'
+];
+const FILMS={
+  '600':{label:'600',tint:'rgba(255,190,120,.10)',contrast:1.04},
+  'sx70':{label:'SX-70',tint:'rgba(255,150,150,.12)',contrast:1.10},
+  'wide':{label:'宽幅',tint:'rgba(150,200,255,.08)',contrast:1.0,wide:true}
+};
+let polaPhoto=null, polaFilm='600', devTimer=null;
+function pickNote(){ $('#polaNote').value=NOTES[Math.floor(Math.random()*NOTES.length)]; renderPola(true); }
+async function renderPola(redevelop){
+  if(!polaPhoto){ $('#polaCap').textContent='先去「胶卷」选一张照片'; return; }
+  const film=FILMS[polaFilm];
+  const W=1000, pad=film.wide?70:96, bottom=film.wide?190:230;
+  const iw=W-pad*2, ih=film.wide?Math.round(iw*0.85):Math.round(iw*1.02);
+  const H=ih+bottom+pad-24;
+  const c=$('#polaCanvas'); c.width=W; c.height=H;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  // 照片 cover 裁剪
+  const img=await blobToImage(polaPhoto.blob);
+  const s=Math.max(iw/img.width, ih/img.height);
+  const sw=iw/s, sh=ih/s, sx=(img.width-sw)/2, sy=(img.height-sh)/2;
+  ctx.save(); ctx.filter=`contrast(${film.contrast}) saturate(1.05)`;
+  ctx.drawImage(img,sx,sy,sw,sh, pad,pad,iw,ih); ctx.restore();
+  // 偏色叠层
+  ctx.fillStyle=film.tint; ctx.fillRect(pad,pad,iw,ih);
+  // 颗粒
+  const noise=noisePattern(ctx); ctx.save(); ctx.globalAlpha=.10; ctx.globalCompositeOperation='overlay';
+  ctx.fillStyle=noise; ctx.fillRect(pad,pad,iw,ih); ctx.restore();
+  // 边缘轻微暗角
+  const vg=ctx.createRadialGradient(W/2,pad+ih/2,iw*0.45,W/2,pad+ih/2,iw*0.85);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(40,25,10,.14)');
+  ctx.fillStyle=vg; ctx.fillRect(pad,pad,iw,ih);
+  // 日期戳
+  ctx.font='500 34px "Bradley Hand","Marker Felt",cursive';
+  ctx.fillStyle='rgba(255,138,61,.92)';
+  const ds=fmtDate(new Date(polaPhoto.ts));
+  ctx.fillText(ds, pad+iw-ctx.measureText(ds).width-14, pad+ih-16);
+  // 注记
+  const note=$('#polaNote').value.trim();
+  $('#polaCap').textContent=note||' ';
+  $('#polaCap').style.height=(bottom-40)+'px';
+  await new Promise(r=>setTimeout(r,30));
+  capIntoCanvas(ctx,note,pad,ih+pad+14,W-pad*2,bottom-46);
+  // 显影动画
+  if(redevelop){
+    const box=$('#polaBox'); box.classList.remove('polaroid-developed'); box.classList.add('polaroid-developing');
+    void box.offsetWidth; clearTimeout(devTimer);
+    devTimer=setTimeout(()=>{box.classList.remove('polaroid-developing');box.classList.add('polaroid-developed')},2600);
+  }
+}
+function capIntoCanvas(ctx,text,x,y,w,h){
+  if(!text) return;
+  ctx.save();
+  ctx.font='46px "Kaiti SC","STKaiti","Marker Felt",cursive';
+  ctx.fillStyle='#5a4a38'; ctx.textAlign='center';
+  // 简单折行
+  const chars=[...text]; let line='', lines=[];
+  for(const ch of chars){ if(ctx.measureText(line+ch).width>w-40){lines.push(line);line=ch;} else line+=ch; }
+  lines.push(line);
+  const lh=58, y0=y+(h-lines.length*lh)/2+40;
+  lines.forEach((l,i)=>ctx.fillText(l, x+w/2, y0+i*lh));
+  ctx.restore();
+}
+let _noise=null;
+function noisePattern(ctx){
+  if(_noise) return _noise;
+  const n=document.createElement('canvas'); n.width=n.height=128;
+  const nc=n.getContext('2d'), im=nc.createImageData(128,128);
+  for(let i=0;i<im.data.length;i+=4){const v=Math.random()*255|0;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255}
+  nc.putImageData(im,0,0); _noise=ctx.createPattern(n,'repeat'); return _noise;
+}
+function blobToImage(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);const i=new Image();i.onload=()=>{URL.revokeObjectURL(u);res(i)};i.onerror=rej;i.src=u})}
+async function polaSave(){
+  if(!polaPhoto){ toast('先选一张照片'); return; }
+  const c=$('#polaCanvas');
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));
+  const file=new File([blob],`snapsaga-pola-${Date.now()}.jpg`,{type:'image/jpeg'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:'拾光拍立得'}); return; }catch(e){}
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=file.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+  toast('已保存到下载（或用分享面板存到相册）');
+}
+
+/* ================= 修图 ================= */
+const STYLES=[
+  {k:'summer',n:'夏日动画风',prompt:'Redraw this photo in a warm hand-drawn anime summer style: luminous saturated greens, translucent blue sky with towering cumulus clouds, soft golden light halos, gentle painterly texture. Strictly keep the original composition, subject positions and number of people unchanged.',css:'saturate(1.5) contrast(1.08) brightness(1.07) hue-rotate(-6deg)',overlay:'rgba(255,196,80,.10)'},
+  {k:'ink',n:'水墨江南',prompt:'Redraw this photo as a Chinese ink-wash painting: monochrome ink gradients on rice paper, misty negative space, soft brush edges, a single restrained vermilion seal accent. Keep the original composition and subjects recognizable.',css:'grayscale(.85) contrast(1.15) brightness(1.06)',overlay:'rgba(246,239,221,.16)'},
+  {k:'film',n:'复古胶片',prompt:'Redraw this photo as vintage 35mm film photography: warm faded tones, soft grain, gentle vignette, slightly lifted blacks, 1970s travel postcard mood. Keep composition and subjects unchanged.',css:'sepia(.32) saturate(1.12) contrast(1.04)',overlay:'rgba(120,80,40,.08)'},
+  {k:'cyber',n:'赛博都市',prompt:'Redraw this photo as a cyberpunk city nightscape style: neon teal and magenta rim light, wet reflective surfaces, cinematic haze, high contrast. Keep the original composition and subjects unchanged.',css:'contrast(1.18) saturate(1.45) hue-rotate(-10deg)',overlay:'rgba(90,0,140,.14)'},
+  {k:'warm',n:'暖阳',prompt:'Redraw this photo with warm late-afternoon sunlight: golden hour glow, soft long shadows, honey-toned highlights. Keep composition and subjects unchanged.',css:'brightness(1.06) saturate(1.18) sepia(.14)',overlay:'rgba(255,150,60,.10)'}
+];
+let editPhoto=null, editStyle='summer', editStrength=.7, editResultBlob=null, aiApplied=false;
+function renderStyles(){
+  $('#styleRow').innerHTML=STYLES.map(s=>`<button class="style-chip ${s.k===editStyle?'on':''}" data-k="${s.k}">${s.n}</button>`).join('');
+  $$('#styleRow .style-chip').forEach(b=>b.addEventListener('click',()=>{editStyle=b.dataset.k;renderStyles();applyLocalFilter()}));
+}
+async function applyLocalFilter(){
+  if(!editPhoto) return;
+  const st=STYLES.find(s=>s.k===editStyle);
+  const img=await blobToImage(editPhoto.blob);
+  const max=1100, sc=Math.min(1,max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+  const ctx=c.getContext('2d');
+  // 原图
+  ctx.drawImage(img,0,0,c.width,c.height);
+  // 滤镜层（强度混合）
+  const fc=document.createElement('canvas'); fc.width=c.width; fc.height=c.height;
+  const fx=fc.getContext('2d'); fx.filter=st.css; fx.drawImage(img,0,0,c.width,c.height);
+  fx.filter='none'; fx.fillStyle=st.overlay; fx.fillRect(0,0,c.width,c.height);
+  ctx.globalAlpha=editStrength; ctx.drawImage(fc,0,0); ctx.globalAlpha=1;
+  editResultBlob=null; aiApplied=false;
+  const stage=$('#editStage');
+  const old=stage.querySelector('canvas,img'); if(old&&old.id!=='editEmpty') old.remove();
+  $('#editEmpty').style.display='none';
+  c.id='editCanvas'; stage.appendChild(c);
+}
+$('#editStrength').addEventListener('input',e=>{
+  editStrength=e.target.value/100; $('#strengthVal').textContent=e.target.value+'%';
+  if(editPhoto&&!aiApplied) applyLocalFilter();
+});
+async function aiRedraw(){
+  if(!editPhoto){ toast('先选一张照片'); return; }
+  const base=(localStorage.getItem('ss_ai_base')||'').replace(/\/+$/,'');
+  const key=localStorage.getItem('ss_ai_key')||'';
+  const model=localStorage.getItem('ss_ai_model')||'gpt-image-2';
+  if(!base||!key){ toast('未配置 AI：先在设置里填 API Base 和 Key（本地滤镜不受影响）',3200); openSettings(); return; }
+  const st=STYLES.find(s=>s.k===editStyle);
+  $('#aiBusy').classList.add('show');
+  try{
+    // 送原图（不叠加本地滤镜），prompt 带 strength 语义
+    const img=await blobToImage(editPhoto.blob);
+    const c=document.createElement('canvas'); const max=1024, sc=Math.min(1,max/Math.max(img.width,img.height));
+    c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    const pngBlob=await new Promise(r=>c.toBlob(r,'image/png'));
+    const fd=new FormData();
+    fd.append('image',pngBlob,'photo.png');
+    fd.append('prompt',`${st.prompt} Redraw strength: ${Math.round(editStrength*100)}%.`);
+    fd.append('model',model); fd.append('n','1'); fd.append('size','1024x1024');
+    const resp=await fetch(base+'/images/edits',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+    if(!resp.ok){
+      let m=resp.status+' '+resp.statusText;
+      try{ const j=await resp.json(); if(j.error&&j.error.message)m=j.error.message; }catch(e){}
+      throw new Error(m);
+    }
+    const j=await resp.json();
+    const d=j.data&&j.data[0]||{};
+    let outBlob;
+    if(d.b64_json){ outBlob=await (await fetch('data:image/png;base64,'+d.b64_json)).blob(); }
+    else if(d.url){ outBlob=await (await fetch(d.url)).blob(); }
+    else throw new Error('响应里没有图像数据');
+    // 展示
+    editResultBlob=outBlob; aiApplied=true;
+    const out=await blobToImage(outBlob);
+    const stage=$('#editStage');
+    const old=stage.querySelector('#editCanvas'); if(old)old.remove();
+    $('#editEmpty').style.display='none';
+    out.id='editCanvas'; stage.appendChild(out);
+    toast('AI 重绘完成 ✨');
+  }catch(e){
+    const msg=(''+e.message).includes('Failed to fetch')?'网络不通或该服务不允许浏览器直连（CORS）':e.message;
+    toast('AI 重绘失败：'+msg,4000);
+  }finally{ $('#aiBusy').classList.remove('show'); }
+}
+async function editSave(){
+  const c=$('#editStage #editCanvas'); if(!c){ toast('还没有可保存的结果'); return; }
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));
+  const file=new File([blob],`snapsaga-edit-${Date.now()}.jpg`,{type:'image/jpeg'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:'拾光修图'}); return; }catch(e){}
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=file.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+  toast('已保存');
+}
+
+/* ================= 胶卷 ================= */
+async function renderFilm(){
+  const grid=$('#filmGrid');
+  $('#emptyFilm').style.display=PHOTOS.length?'none':'flex';
+  grid.innerHTML='';
+  for(const p of PHOTOS){
+    const cell=document.createElement('div'); cell.className='film-cell'+(selected.has(p.id)?' sel':'');
+    const url=URL.createObjectURL(p.blob);
+    cell.innerHTML=`<img src="${url}"><span class="ts">${fmtTime(new Date(p.ts))}</span><span class="sel-mark">✓</span>`;
+    cell.addEventListener('click',()=>{
+      if(selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
+      cell.classList.toggle('sel');
+    });
+    cell.addEventListener('contextmenu',async e=>{
+      e.preventDefault();
+      if(confirm('删除这张照片？')){ await DB.del(p.id); const i=PHOTOS.findIndex(x=>x.id===p.id); if(i>-1)PHOTOS.splice(i,1); selected.delete(p.id); renderFilm(); }
+    });
+    grid.appendChild(cell);
+  }
+  if(!PHOTOS.length) grid.innerHTML='';
+}
+
+/* ================= 设置 ================= */
+function openSettings(){ $('#settings').classList.add('show'); $('#settingsMask').classList.add('show');
+  $('#aiBase').value=localStorage.getItem('ss_ai_base')||'https://api.openai.com/v1';
+  $('#aiKey').value=localStorage.getItem('ss_ai_key')||'';
+  $('#aiModel').value=localStorage.getItem('ss_ai_model')||'gpt-image-2';
+  $('#latInput').value=geo.lat??''; $('#lonInput').value=geo.lon??'';
+}
+function closeSettings(){ $('#settings').classList.remove('show'); $('#settingsMask').classList.remove('show'); }
+$('#btnSettings').addEventListener('click',openSettings);
+$('#settingsMask').addEventListener('click',closeSettings);
+$('#btnGeo').addEventListener('click',()=>{
+  if(!navigator.geolocation){ toast('此浏览器不支持定位'); return; }
+  toast('定位中…');
+  navigator.geolocation.getCurrentPosition(p=>{
+    geo={lat:+p.coords.latitude.toFixed(4),lon:+p.coords.longitude.toFixed(4)};
+    $('#latInput').value=geo.lat; $('#lonInput').value=geo.lon; saveGeo(); toast('已定位，黄金时刻已就绪');
+  },()=>toast('定位失败：可手动填经纬度'),{timeout:8000});
+});
+$('#btnSunOn').addEventListener('click',()=>{
+  const la=parseFloat($('#latInput').value), lo=parseFloat($('#lonInput').value);
+  if(isNaN(la)||isNaN(lo)){ toast('先填或定位经纬度'); return; }
+  geo={lat:la,lon:lo}; saveGeo(); renderSun(); toast('黄金时刻提醒已启用（离线计算）');
+});
+$('#btnAiSave').addEventListener('click',()=>{
+  localStorage.setItem('ss_ai_base',$('#aiBase').value.trim());
+  localStorage.setItem('ss_ai_key',$('#aiKey').value.trim());
+  localStorage.setItem('ss_ai_model',$('#aiModel').value.trim()||'gpt-image-2');
+  toast('已保存到本机');
+});
+$('#btnAiTest').addEventListener('click',async()=>{
+  const base=($('#aiBase').value||'').replace(/\/+$/,''), key=$('#aiKey').value.trim();
+  if(!base||!key){ toast('先填 Base 和 Key'); return; }
+  toast('测试中…');
+  try{
+    const r=await fetch(base+'/models',{headers:{Authorization:'Bearer '+key}});
+    toast(r.ok?'连通成功 ✓（HTTP '+r.status+'）':'服务响应 HTTP '+r.status+'，检查 Base/Key');
+  }catch(e){ toast('连不上：'+((''+e.message).includes('Failed to fetch')?'网络或 CORS 限制':e.message),3600); }
+});
+$('#btnWipe').addEventListener('click',async()=>{
+  if(!confirm('清空全部照片与设置？不可恢复')) return;
+  await DB.clear(); PHOTOS.length=0; selected.clear(); localStorage.clear(); renderFilm(); closeSettings(); toast('已清空');
+});
+
+/* ================= 事件绑定与启动 ================= */
+$('#startCam').addEventListener('click',camStart);
+$('#btnSwitch').addEventListener('click',camSwitch);
+$('#shutter').addEventListener('click',capture);
+$('#btnLevel').addEventListener('click',toggleLevel);
+$('#filmSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  $$('#filmSeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  polaFilm=b.dataset.f; renderPola(true);
+});
+$('#btnNoteDice').addEventListener('click',pickNote);
+$('#polaNote').addEventListener('input',()=>renderPola(false));
+$('#btnPolaRedo').addEventListener('click',()=>renderPola(true));
+$('#btnPolaSave').addEventListener('click',polaSave);
+$('#btnClearSel').addEventListener('click',()=>{selected.clear();renderFilm()});
+$('#btnToPola').addEventListener('click',async()=>{
+  if(!selected.size){ toast('先在胶卷里点选照片'); return; }
+  polaPhoto=PHOTOS.find(p=>p.id===[...selected][0]);
+  $$('nav.bottom button').forEach(x=>x.classList.toggle('on',x.dataset.v==='pola'));
+  $$('.view').forEach(v=>v.classList.remove('on')); $('#view-pola').classList.add('on');
+  if(!$('#polaNote').value) pickNote(); else renderPola(true);
+});
+$('#btnToEdit').addEventListener('click',()=>{
+  if(!selected.size){ toast('先在胶卷里点选照片'); return; }
+  editPhoto=PHOTOS.find(p=>p.id===[...selected][0]);
+  $$('nav.bottom button').forEach(x=>x.classList.toggle('on',x.dataset.v==='edit'));
+  $$('.view').forEach(v=>v.classList.remove('on')); $('#view-edit').classList.add('on');
+  renderStyles(); applyLocalFilter();
+});
+$('#btnEditSave').addEventListener('click',editSave);
+$('#btnEditAI').addEventListener('click',aiRedraw);
+
+(async function init(){
+  await DB.open();
+  PHOTOS.push(...await DB.all());
+  loadGeo(); renderSun(); renderScenes(); renderFilm();
+  if(geo.lat!=null) renderSun();
+})();
+</script>
+</body>
+</html>
