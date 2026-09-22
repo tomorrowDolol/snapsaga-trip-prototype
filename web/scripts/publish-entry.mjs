@@ -32,3 +32,18 @@ const banner = `<!-- ⚠️ 本文件由 npm run build 生成（web/scripts/publ
 
 writeFileSync(outPath, banner + published);
 console.log(`写出 web/index.html（引用 dist/ 产物，${published.length} 字节）`);
+
+// —— 同时把入口也放进 dist/ 本身 ——
+// 为什么：manifest 的 start_url 是 "./"，而 manifest 位于 /web/dist/ 下，于是 iOS「添加到主屏幕」
+// 后点图标打开的是 **/web/dist/**；那里只有 app.html、没有 index.html，Pages 直接 404。
+// 补上 dist/index.html 后：① 已装到主屏的图标不用重新添加就能恢复；
+// ② 装出来的应用落在 SW 作用域（/web/dist/）内，离线可用。
+// dist/app.html 的引用本来就是相对 dist 的（./assets/...），所以原样再写一份即可。
+const distOutPath = resolve(WEB, 'dist', 'index.html');
+writeFileSync(
+  distOutPath,
+  '<!-- ⚠️ 由 npm run build 生成（web/scripts/publish-entry.mjs）：让 /web/dist/ 也能打开应用。\n' +
+    '     原因：manifest 的 start_url="./" 解析到 /web/dist/，iOS 添加到主屏后打开的正是它。 -->\n' +
+    distHtml,
+);
+console.log(`写出 web/dist/index.html（PWA start_url 落点，${distHtml.length} 字节）`);

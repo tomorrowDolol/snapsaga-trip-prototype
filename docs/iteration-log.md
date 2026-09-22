@@ -38,7 +38,7 @@
 | K20 | 有**两套实现**（根 `index.html` 与 `web/`），同一功能改两边会漂移；只有太阳算法有数值等价性测试守着 | 一边的改动不会自动出现在另一边 | 功能演进只改 `web/`（有测试 + guard），根原型冻结；必须两边同改时先改 `web/` 再同步并跑 `npm run verify` |
 | K21 | 旧验收脚本（`snapsaga_queue_check/*.cjs`、`ss_e2e.cjs`）依赖页面全局（`PHOTOS`/`DB`/`GenQueue`/`cam`…），靠 `src/debug/bridge.ts` 只读兼容层才能跑 | 删掉 bridge 会让那批脚本失效（`web/e2e/` 已内化同样断言，不受影响） | 保留 bridge（零成本、便于线上排查）；新验收一律写在 `web/e2e/` |
 | K22 | e2e 里相机仍是 canvas 流 + `ImageCapture` stub；真机 `takePhoto` 的分辨率提升、iPhone 真实能力清单都不在 CI 覆盖内（延续已归档的 K12/K13/K14） | 真机行为仍可能与本机不一致（历史教训：v0.4 曾误判 iOS 不支持 takePhoto） | 出游实测时用 `tools/ios-probe.html` + 取景信息条（显示实际分辨率与本次是静止图像还是抓帧）复测 |
-| K23 | **PWA 的 SW scope 是 `/web/dist/`**（sw.js 就在产物目录里）：安装到主屏后的 `start_url` 落在 scope 内、离线可用；而 `/web/` 入口页本身不受 SW 控制（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常） | 离线只覆盖产物目录 | 要连 `/web/` 一起离线需把 sw.js 放到 `web/` 根（再拆一层构建步骤）；当前安装路径已满足离线需求 |
+| K23 | ~~PWA 安装后 start_url 落在 scope 内~~ **已修（2026-09-22）**：manifest 在 `/web/dist/` 下、`start_url="./"` 解析为 **`/web/dist/`**，而 dist 里只有 `app.html` 没有 `index.html` → **iOS 添加到主屏后点图标是 GitHub Pages 404**。修法：构建时同时生成 `dist/index.html`（引用相对 dist），并把 `./index.html` 加进 SW 预缓存 | 已装到主屏的图标**无需重新添加**即可恢复（打开的就是 `/web/dist/`，现在返回 200）；装出来的应用还落在 SW scope 内 → **离线可启动** | 已修。残留：`/web/` 入口页仍不在 SW scope 内（离线刷新 `/web/` 会失败，`/web/dist/` 正常） |
 | K24 | 主题模式的**真实出图效果**未在真机 + 真 Key 下验证：CI 只 stub 生图接口（返回 8×8 png），能证明「拼图 → 单图润色」的链路通、产出张数对，但「合成一张像不像海报」「统一风格是否真统一」取决于模型能力 | 效果好坏只能上线实测 | 出游实测一轮（真机 + 真 Key）；提示词词库就是要拿去收集调参数据的 |
 | K25 | 主题任务的队列快照会带上**多图入参 blob**（最多 9 张），与 K8 同源、放大更明显 | 未完成任务期间存储放大（最多 9×） | 与 K8 合并做：快照只存 `photoId`/`sourceIds`，恢复时回查 `photos` 仓 |
 

@@ -123,8 +123,9 @@ npm run verify     # build → test → guard → e2e 一条龙
   `scripts/assemble-site.mjs` 组装出的 `_site/`；**`web/dist` 不提交**（`.gitignore` 已忽略，由 CI 构建）。
 - `web/index.html` 是 `npm run build` **生成**的入口页（把引用改写成 `./dist/…`），`…/web/` 就是它——
   **要提交、不要手改**；改界面改 `web/app.html`。
-- `/web/` 与 `/web/dist/app.html` 都能打开应用；Service Worker 的路径由页面里的 `<link rel=manifest>` 反推
-  （`sw.js` 在 manifest 旁边），两种入口都能拿到正确 scope。
+- 三个入口都能打开应用：`/web/`（分享链接）、`/web/dist/`（**PWA start_url 落点，iOS 添加到主屏后打开的就是它**）、`/web/dist/app.html`。
+  `dist/index.html` 由构建生成（`scripts/publish-entry.mjs`）——缺了它，安装到主屏后点图标会 404。
+  Service Worker 的路径由页面里的 `<link rel=manifest>` 反推（`sw.js` 在 manifest 旁边），三种入口都能拿到正确 scope。
 
 为什么源入口不叫 `index.html`：Pages 请求目录只会找 `index.html`，而 Vite 源入口若也叫这个名字，
 构建产物会盖掉它（第一次上线时 `…/web/` 返回 200 但资源全 404，就是这么来的）。
@@ -196,8 +197,8 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
   真无缝要模型侧支持多图入参，开关预留在 `domain/collage.ts` 的 `MULTI_IMAGE_EDITS_SUPPORTED`。
 - 设置是**底部抽屉**而不是独立页面（K27）：避免出现两份设置表单（重复 id + 双份维护）。
 - PWA 离线缓存是保守策略（导航 network-first、静态资源 stale-while-revalidate）；首次打开仍需网络。
-  SW 的 scope 是 `/web/dist/`（sw.js 就在产物目录里），所以主屏安装后的 `start_url` 落在 scope 内、离线可用；
-  而 `/web/` 入口页本身不在 scope 内（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常）
+  SW 的 scope 是 `/web/dist/`（sw.js 就在产物目录里），主屏安装后的 `start_url` 正是 `/web/dist/`，
+  所以装出来的应用在 scope 内、**离线可启动**；而 `/web/` 入口页本身不在 scope 内（离线刷新 `/web/` 会失败，`/web/dist/` 正常）
   ——见 [iteration-log 的活跃已知问题 K23](../docs/iteration-log.md#活跃已知问题)。
 
 ## 改哪边？
