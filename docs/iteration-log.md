@@ -4,6 +4,36 @@
 
 ---
 
+## v0.3 — 2026-09-22（生图默认 Base 指向 api.klong.lat）
+
+### 背景
+
+v0.2 的 AI 生图 Base 默认值还是 `https://api.openai.com/v1`，且**只在设置框里当预填值**：`aiCreds()` 读不到已保存值时返回空字符串，等于没手动填过 Base 的机器上 AI 完全用不了。本版把默认 Base 改成 `https://api.klong.lat/v1`，并让它真的生效。
+
+### 改动点
+
+1. 新增 `AI_BASE_DEFAULT = 'https://api.klong.lat/v1'` 与 `aiBaseSetting()`：未填过 → 用默认值；填过 → 用用户的值（去掉尾部 `/`）。默认值从此只在一处定义，设置框与生图请求共用。
+2. `aiCreds()` 的 `base` 改为走 `aiBaseSetting()`，所以**只填 Key 就能生图**（请求仍打 `<base>/images/edits`，与 v0.2 路径结构一致）。
+3. 设置面板打开时 `#aiBase` 预填 `aiBaseSetting()`；输入框占位文案与「未配置 AI」提示同步改为「填 API Key（Base 已有默认值）」，不再误导用户以为必须填 Base。
+4. 保留旧默认 `https://api.openai.com/v1` 为 `AI_BASE_LEGACY`，仅用于识别「没主动改过、只是沿用了旧默认值」的浏览器：这种情况直接换成新默认，不会把人卡在 openai 上。
+
+### 验证情况
+
+| 项目 | 命令 | 结果 |
+|------|------|------|
+| HTML 结构 | `python3 <html.parser 脚本>` | PASS：0 个未闭合/孤立标签 |
+| JS 语法 | 抽出 `<script>` → `node --check` | PASS |
+| 队列调度（用户脚本，未改一字） | `node check_queue.mjs <index.html>` | PASS 全部 18 项 |
+| 队列调度 + 持久化（仓库内） | `node tools/check_gen_queue.mjs` | PASS 全部 41 项 |
+| 默认 Base 是否真的生效 | Playwright：清空 localStorage 后读 `aiCreds().base` 与设置框预填值 | PASS：两者均为 `https://api.klong.lat/v1`；只填 Key 即视为已配置 |
+| 未覆盖 | — | 没有用真实 Key 打过 `api.klong.lat`（无凭证）；该服务的 CORS 行为未知，仍受 K3 约束 |
+
+### 已知问题与限制
+
+- 新增 K11（用户手动保存过自定义 Base 的浏览器不会被覆盖）。
+
+---
+
 ## v0.2 — 2026-09-22（生图队列：拍照不等生成）
 
 ### 背景
@@ -58,6 +88,7 @@ v0.1 的生图（AI 重绘）是「点一下 → 全屏等待 20–60s」，与�
 | K8 | 队列快照里带源图 blob（为了让刷新恢复不依赖原片），与胶卷原片在 IndexedDB 里各存一份；在生成中刷新会多占一份原图空间 | 存储翻倍（仅未完成任务） | v0.3：快照只存 `photoId`，恢复时回查 photos 仓 |
 | K9 | 生成中刷新页面 → 该任务重新排队，服务端可能已经出了一张图，属于重复生成（多花钱） | 极端情况多花一次生图费用 | 正式版用内容 hash 做幂等键（见 p0-plan A4）；原型接受 |
 | K10 | 大量快速重渲染时，被提前 revoke 的缩略图会产生 `net::ERR_FILE_NOT_FOUND` 控制台噪声（实测 0 次元素仍在 DOM 的加载失败，纯噪声） | 仅控制台噪声 | 若以后觉得吵，改成延迟 ~1s 回收旧批次 |
+| K11 | 用户显式保存过「既不是旧默认、也不是新默认」的自定义 Base 时不会被覆盖（含自建网关）；而保存值**恰好等于旧默认** `https://api.openai.com/v1` 的浏览器会被切到新默认（无法区分「随手沿用默认」与「手打 openai」，按后者更少见处理） | 想故意继续用 openai 官方地址的人需在设置里重新填一次 | 预期行为（不覆盖用户显式配置）；若需要统一，后续加「重置为默认」按钮 |
 
 ### v0.3 候选（按优先级）
 

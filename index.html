@@ -286,7 +286,7 @@
 <header class="app">
   <div>
     <div class="logo">拾光<em>·</em>SnapSaga</div>
-    <div class="sub">TRIP PROTOTYPE v0.2</div>
+    <div class="sub">TRIP PROTOTYPE v0.3</div>
   </div>
   <div class="right">
     <button class="iconbtn" id="btnQueue" title="生图队列">✨<span class="badge" id="queueBadge">0</span></button>
@@ -412,7 +412,7 @@
 
   <h3>✨ AI 重绘（可选）</h3>
   <p class="desc">正式版走自家网关，原型允许直连体验。Key 只存本机 localStorage。无 Key 时本地滤镜全部可用。</p>
-  <div class="field"><input id="aiBase" placeholder="API Base，如 https://api.openai.com/v1"></div>
+  <div class="field"><input id="aiBase" placeholder="API Base，默认 https://api.klong.lat/v1"></div>
   <div class="field"><input id="aiKey" type="password" placeholder="API Key（sk-…）"></div>
   <div class="field"><input id="aiModel" placeholder="模型名，默认 gpt-image-2"></div>
   <div class="field"><button class="mini" id="btnAiTest">测试连通</button><button class="mini ghost" id="btnAiSave">保存</button></div>
@@ -797,9 +797,16 @@ $('#editStrength').addEventListener('input',e=>{
 });
 /* 原始 AI 调用：只负责「发请求 → 拿回图像 Blob」，无任何 UI。
    修图页与后台生图队列共用这一条通道（便于以后换成网关）。 */
+const AI_BASE_DEFAULT='https://api.klong.lat/v1';   // 默认生图 Base（可在设置里改，改后存本机 localStorage）
+const AI_BASE_LEGACY='https://api.openai.com/v1';   // 旧默认：仅用于识别「没主动改过、只是沿用了默认值」
+function aiBaseSetting(){
+  const saved=(localStorage.getItem('ss_ai_base')||'').trim();
+  if(!saved||saved===AI_BASE_LEGACY) return AI_BASE_DEFAULT;
+  return saved.replace(/\/+$/,'');
+}
 function aiCreds(){
   return {
-    base:(localStorage.getItem('ss_ai_base')||'').replace(/\/+$/,''),
+    base:aiBaseSetting(),
     key:localStorage.getItem('ss_ai_key')||'',
     model:localStorage.getItem('ss_ai_model')||'gpt-image-2'
   };
@@ -811,7 +818,7 @@ function humanAiErr(e){
 }
 async function aiRedrawCore(srcBlob, style, strength){
   const {base,key,model}=aiCreds();
-  if(!base||!key) throw new Error('未配置 AI：先在设置里填 API Base 和 Key（本地滤镜不受影响）');
+  if(!base||!key) throw new Error('未配置 AI：先在设置里填 API Key（Base 已有默认值，本地滤镜不受影响）');
   const st=style||STYLES[0], sp=(strength==null?.7:strength);
   // 送原图（不叠加本地滤镜），prompt 带 strength 语义
   const img=await blobToImage(srcBlob);
@@ -850,7 +857,7 @@ async function aiRedraw(){
     toast('AI 重绘完成 ✨');
   }catch(e){
     const c=aiCreds();
-    if(!c.base||!c.key){ toast('未配置 AI：先在设置里填 API Base 和 Key（本地滤镜不受影响）',3200); openSettings(); }
+    if(!c.base||!c.key){ toast('未配置 AI：先在设置里填 API Key（Base 已有默认值）',3200); openSettings(); }
     else toast('AI 重绘失败：'+humanAiErr(e),4000);
   }finally{ $('#aiBusy').classList.remove('show'); }
 }
@@ -1104,7 +1111,7 @@ function renderGenBar(){
 }
 
 function openSettings(){ $('#settings').classList.add('show'); $('#settingsMask').classList.add('show');
-  $('#aiBase').value=localStorage.getItem('ss_ai_base')||'https://api.openai.com/v1';
+  $('#aiBase').value=aiBaseSetting();
   $('#aiKey').value=localStorage.getItem('ss_ai_key')||'';
   $('#aiModel').value=localStorage.getItem('ss_ai_model')||'gpt-image-2';
   $('#latInput').value=geo.lat??''; $('#lonInput').value=geo.lon??'';
@@ -1134,7 +1141,7 @@ $('#btnAiSave').addEventListener('click',()=>{
 });
 $('#btnAiTest').addEventListener('click',async()=>{
   const base=($('#aiBase').value||'').replace(/\/+$/,''), key=$('#aiKey').value.trim();
-  if(!base||!key){ toast('先填 Base 和 Key'); return; }
+  if(!base||!key){ toast('先填 API Key（Base 已有默认值，如需自建可改）'); return; }
   toast('测试中…');
   try{
     const r=await fetch(base+'/models',{headers:{Authorization:'Bearer '+key}});
