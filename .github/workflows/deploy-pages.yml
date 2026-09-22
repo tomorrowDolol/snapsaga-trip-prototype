@@ -1,0 +1,81 @@
+name: Deploy Pages
+
+# 发布形状由 scripts/assemble-site.mjs 决定（CI 与本地同一份逻辑）：
+#   /            根 index.html（单文件原型，冻结）
+#   /docs /tools 文档与工具
+#   /web/        React 版：构建生成的入口 + dist 产物
+#
+# 因为产物由 CI 生成，仓库里不再提交 web/dist（见 web/.gitignore）。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 安装依赖
+        working-directory: web
+        run: npm ci
+
+      - name: 单测（53 项，jsdom）
+        working-directory: web
+        run: npm test
+
+      - name: 构建（TS 严格模式 + Vite）
+        working-directory: web
+        run: npm run build
+
+      # guard 的「产物运行时」与「子路径部署冒烟」需要真浏览器；
+      # 子路径冒烟正是防住上一次 /web/ 资源全 404 的那道门，值得在 CI 里跑。
+      - name: 缓存 Playwright 浏览器
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      - name: 安装 Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: 红线 guard（源码 + 产物 + 产物运行时 + 子路径冒烟）
+        working-directory: web
+        run: npm run guard
+
+      - name: 组装站点产物
+        run: node scripts/assemble-site.mjs _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

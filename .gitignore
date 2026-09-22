@@ -1,0 +1,10 @@
+# 站点组装输出（CI 上传的产物目录，scripts/assemble-site.mjs 生成）
+_site/
+
+# 依赖与缓存
+**/node_modules/
+**/.vite/
+.DS_Store
+
+# 注意：web/dist 目前仍提交（Pages 尚未切到 Actions 发布），
+# 切过去之后会加进 web/.gitignore 由 CI 构建，见 K19。
