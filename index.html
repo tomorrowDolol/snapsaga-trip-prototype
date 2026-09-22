@@ -62,6 +62,13 @@
   }
   #camPlaceholder .big{font-size:44px}
   #camPlaceholder p{font-size:13px; max-width:280px}
+  /* 取景信息：当前分辨率 + 本次快门用的是「静止图像」还是「抓帧」 */
+  #camMeta{
+    position:absolute; left:10px; bottom:10px; z-index:6; display:none;
+    background:rgba(14,22,23,.62); color:#e8f1f1; font-size:11px; line-height:1.5;
+    padding:5px 9px; border-radius:8px; backdrop-filter:blur(3px); pointer-events:none;
+  }
+  #camMeta b{color:#ffb27a; font-weight:700}
   #startCam{
     background:var(--accent); color:#fff; font-weight:700; font-size:15px;
     padding:12px 30px; border-radius:999px;
@@ -286,7 +293,7 @@
 <header class="app">
   <div>
     <div class="logo">拾光<em>·</em>SnapSaga</div>
-    <div class="sub">TRIP PROTOTYPE v0.3</div>
+    <div class="sub">TRIP PROTOTYPE v0.4</div>
   </div>
   <div class="right">
     <button class="iconbtn" id="btnQueue" title="生图队列">✨<span class="badge" id="queueBadge">0</span></button>
@@ -309,6 +316,7 @@
         <button id="startCam">打开相机</button>
       </div>
       <div id="gridLayer"></div>
+      <div id="camMeta"></div>
       <div id="levelHud"><span id="levelDot"></span><span id="levelText">水平仪未开启</span></div>
       <div id="sunBar">
         <span class="ico">🌅</span>
@@ -518,27 +526,64 @@ const DB={db:null,
 const PHOTOS=[]; const AI_ALBUM=[]; const selected=new Set();
 
 /* ================= 相机 ================= */
-const cam={stream:null, facing:'environment'};
+const cam={stream:null, facing:'environment', mode:'frame', res:'', lastShot:'', still:('ImageCapture' in window)};
+function camMeta(){
+  const el=$('#camMeta'); if(!el) return;
+  if(!cam.res){ el.style.display='none'; return; }
+  el.style.display='block';
+  const how=cam.lastShot==='still'?'本次：静止图像':cam.lastShot==='frame'?'本次：抓帧':'';
+  el.innerHTML=`${cam.res} · ${cam.still?'支持静止图像':'仅能抓帧'}${how?' · <b>'+how+'</b>':''}`;
+}
+/* 分辨率与对焦：逐项 try，任一项不被支持不能拖累其它项 */
+async function camTune(){
+  const t=cam.stream&&cam.stream.getVideoTracks()[0]; if(!t) return;
+  for(const adv of [{width:{ideal:3840},height:{ideal:2160}},{focusMode:'continuous'}]){
+    try{ await t.applyConstraints({advanced:[adv]}); }catch(e){}
+  }
+  try{
+    const s=t.getSettings()||{};
+    if(s.width&&s.height) cam.res=`相机 ${s.width}×${s.height}`;
+  }catch(e){}
+  camMeta();
+}
 async function camStart(){
   try{
     if(cam.stream) cam.stream.getTracks().forEach(t=>t.stop());
-    cam.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:cam.facing,width:{ideal:1920},height:{ideal:1080}},audio:false});
+    cam.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:cam.facing,width:{ideal:2560},height:{ideal:1440}},audio:false});
     const v=$('#video'); v.srcObject=cam.stream; v.style.display='block';
     $('#camPlaceholder').style.display='none';
+    cam.lastShot=''; cam.res='';
+    await camTune();
   }catch(e){
     toast('相机打开失败：'+(e.name==='NotAllowedError'?'未授权相机权限':e.message),3200);
   }
 }
 function camSwitch(){ cam.facing=cam.facing==='environment'?'user':'environment'; camStart(); }
+/* 快门取图：优先走设备的「静止图像」管线（ImageCapture.takePhoto，分辨率/对焦由相机决定），
+   不支持或失败时回落到「从实时预览抓一帧」。两条路都只产出 Blob，不碰队列与 AI。 */
+async function grabStill(){
+  const v=$('#video');
+  const t=cam.stream&&cam.stream.getVideoTracks()[0];
+  if(cam.still&&t){
+    try{
+      const ic=new ImageCapture(t);
+      const blob=await ic.takePhoto();
+      if(blob&&blob.size>0) return {blob, kind:'still'};
+    }catch(e){ cam.still=false; camMeta(); }   // 该设备/该流不支持，本次及后续直接用抓帧
+  }
+  const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));
+  return {blob, kind:'frame'};
+}
 async function capture(){
   const v=$('#video');
   if(!cam.stream||!v.videoWidth){ toast('相机还没就绪'); return; }
   $('#flash').style.opacity=.9; setTimeout(()=>$('#flash').style.opacity=0,120);
-  const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
-  c.getContext('2d').drawImage(v,0,0);
-  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));   // 唯一 await：canvas 编码（本机，毫秒级）
-  // ——— 快门路径到此为止：只做「拍下 → 存胶卷 → 入队」，绝不等待 AI ———
-  const rec=await addPhoto(blob);                                   // 另一个 await：本机 IndexedDB 写入
+  // ——— 快门只做「拍下（静止图像或抓帧，本地）→ 存胶卷 → 入队」，全程不碰 AI ———
+  const shot=await grabStill();
+  cam.lastShot=shot.kind; camMeta();
+  const rec=await addPhoto(shot.blob, shot.kind);
   const ai=aiCreds();
   if(genAuto&&ai.base&&ai.key){
     GenQueue.add(rec, curGenStyle(), GEN_STRENGTH);                 // 同步入队，立即返回；生图在后台最多 4 并发
@@ -547,8 +592,8 @@ async function capture(){
     toast('已收进胶卷 🎞 · 未配置 AI（设置里填 Base/Key），这张没入队');
   } else toast('已收进胶卷 🎞');
 }
-async function addPhoto(blob){
-  const rec={id:'p'+Date.now()+Math.random().toString(36).slice(2,6), blob, ts:Date.now()};
+async function addPhoto(blob, shot){
+  const rec={id:'p'+Date.now()+Math.random().toString(36).slice(2,6), blob, ts:Date.now(), shot:shot||'frame'};
   await DB.put(rec); PHOTOS.unshift(rec); renderFilm(); return rec;
 }
 

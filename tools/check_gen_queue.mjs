@@ -177,15 +177,26 @@ function extractFn(src, header) {
 }
 {
   const capture = extractFn(html, 'async function capture(){');
-  const addPhoto = extractFn(html, 'async function addPhoto(blob){');
+  const addPhoto = extractFn(html, 'async function addPhoto(blob, shot){');
+  const grabStill = extractFn(html, 'async function grabStill(){');
   const awaits = [...capture.matchAll(/await\s+[^\n;]*/g)].map((m) => m[0].trim());
   console.log('  capture() 里的 await 语句：\n' + awaits.map((a) => '    · ' + a).join('\n'));
-  check('capture() 只 await 本机操作（canvas 编码 / addPhoto）',
-    awaits.every((a) => /^await new Promise\(r=>c\.toBlob/.test(a) || /^await addPhoto\(blob\)/.test(a)), `${awaits.length} 处 await`);
+  // 快门只能 await 「本地取图」与「本机入库」两类操作；不得出现 AI / 网络等待
+  check('capture() 只 await 本地取图（grabStill）与本机入库（addPhoto）',
+    awaits.every((a) => /^await grabStill\(\)/.test(a) || /^await addPhoto\(/.test(a)), `${awaits.length} 处 await`);
   check('capture() 不含 fetch / aiRedrawCore / await GenQueue',
     !/fetch\(|aiRedrawCore|await\s+GenQueue/.test(capture));
   check('capture() 以同步方式入队（GenQueue.add 未被 await）',
     /GenQueue\.add\(rec/.test(capture) && !/await\s+GenQueue\.add/.test(capture));
+  // 真拍照：优先 ImageCapture.takePhoto，失败/不支持回落抓帧；两条路都不碰 AI
+  check('grabStill() 优先用 ImageCapture.takePhoto 取静止图像',
+    /new ImageCapture\(t\)/.test(grabStill) && /await ic\.takePhoto\(\)/.test(grabStill));
+  check('grabStill() 有抓帧回落（takePhoto 失败/不支持时 drawImage）',
+    /drawImage\(v,0,0\)/.test(grabStill) && /kind:'frame'/.test(grabStill));
+  check('grabStill() 里没有任何 AI / 网络调用',
+    !/fetch\(|aiRedrawCore|GenQueue/.test(grabStill));
+  check('两条取图路都只产出 Blob（kind 标记 still/frame）',
+    /kind:'still'/.test(grabStill) && /kind:'frame'/.test(grabStill));
   check('addPhoto() 只写本机 IndexedDB，不碰 AI', !/fetch\(|aiRedrawCore|GenQueue/.test(addPhoto));
 
   const pump = extractFn(SRC, 'pump(){');
