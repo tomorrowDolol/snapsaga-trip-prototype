@@ -97,7 +97,20 @@ check(
   'capture.ts 里 ImageCapture 出现在抓帧回落之前',
   captureSrc.indexOf('takePhoto()') < captureSrc.indexOf('env.grabFrame()'),
 );
-check('takePhoto 失败会置 still=false（一次性降级，不每张白等）', /catch \{[\s\S]{0,120}state\.still = false/.test(captureSrc));
+// v0.10：把旧的「失败一次就永久置 still=false」替换成「降到阈值才降级」——单次失败只回落本次，
+// 连续失败 STILL_FAIL_LIMIT 次（可配置常量）才标记仅抓帧；这是用户明确要求的缺陷修复。
+check('takePhoto 单次失败不永久关闭 still（只累计连续失败计数）', /state\.stillFailures \+= 1/.test(captureSrc) && !/catch \{[\s\S]{0,120}state\.still = false/.test(captureSrc));
+check('连续失败阈值是可配置常量（STILL_FAIL_LIMIT = 3）', /export const STILL_FAIL_LIMIT = 3/.test(captureSrc));
+check('达到阈值才标记仅抓帧（still = false）', /state\.stillFailures >= state\.stillFailLimit[\s\S]{0,80}state\.still = false/.test(captureSrc));
+check('成功一次把连续失败计数归零', /state\.stillFailures = 0/.test(captureSrc));
+check('降级只在到阈值那一张上报一次（downgraded 提示位）', /downgraded: false|downgraded \}/.test(captureSrc) && /return true;\n  }\n  return false;/.test(captureSrc));
+check('换流时重置降级状态（一次失败不被永久继承）', /export function resetStillForNewStream/.test(captureSrc));
+check('重新检测：重置降级状态并立刻再试一次 takePhoto（成功则标记回到真拍照）', /export async function redetectStill/.test(captureSrc) && /state\.still = true/.test(captureSrc) && /state\.lastShot = ''/.test(captureSrc));
+check('取图方式标记是纯函数（真拍照 / 抓帧 + 警示位）', /export function shotMark/.test(captureSrc) && /label: '真拍照'/.test(captureSrc) && /label: '抓帧'/.test(captureSrc));
+check(
+  '诊断文案包含最近一次 takePhoto 的结果 / 耗时 / 分辨率',
+  /export function camDiagParts/.test(captureSrc) && /\$\{d\.bytes\} 字节 · \$\{d\.ms\} ms/.test(captureSrc) && /未知（先打开相机）/.test(captureSrc),
+);
 check('grabStill 里没有任何 AI / 网络调用', !/fetch\(|aiRedraw/.test(captureSrc));
 check('只对设备真正支持的能力下约束（planConstraints 先读 caps）', /caps\.width && caps\.height/.test(captureSrc) && /supports\('focusMode', 'continuous'\)/.test(captureSrc));
 check('camTune 逐项 try（单项不支持不拖累其它项）', /for \(const c of planConstraints\(caps\)\)[\s\S]{0,200}catch/.test(captureSrc));
@@ -138,6 +151,23 @@ check(
 check('相机抽屉是取景画面内的绝对定位层（不会盖住底栏）', /#camSheet\{[^}]*position:absolute/.test(stylesSrc));
 check('抽屉支持下拉关闭（把手上有指针手势）', /onPointerDown/.test(cameraSheetSrc) && /setPointerCapture/.test(cameraSheetSrc));
 check('调试桥暴露相机抽屉开关（e2e 需要先开抽屉再点里面的元素）', /openCameraSheet/.test(bridgeSrc) && /closeCameraSheet/.test(bridgeSrc));
+/* ---------- 取图方式可见性 + 相机诊断（v0.10） ----------
+   真实缺陷：以前只有抽屉里的 #camMeta 提「静止图像/抓帧」，拍照时看不见；且失败一次就永久降级。
+   现在取景页左下角小字必须带取图方式标记，抽屉里必须有诊断区与「重新检测」。 */
+check('取景页左下角小字带取图方式标记（#camHudInfoShot）', /id="camHudInfoShot"/.test(cameraViewSrc) && /shotMark\(/.test(cameraViewSrc));
+check('标记按 kind 区分（抓帧带警示色 warn）', /data-kind=\{mark\.kind\}/.test(cameraViewSrc) && /#camHudInfo \.shot\.warn\{/.test(stylesSrc) && /#camHudInfo \.shot\{/.test(stylesSrc));
+check('从取景页能读到标记文案（真拍照 / 抓帧）', /\{mark\.label\}/.test(cameraViewSrc));
+const DIAG_FIELDS = ['id="camDiag"', 'id="diagIC"', 'id="diagLastStill"', 'id="diagRes"', 'id="diagShotMark"', 'id="diagFail"', 'id="btnRedetect"'];
+check(
+  '相机抽屉里有「相机诊断」区（ImageCapture / 最近一次 takePhoto / 分辨率 / 取图方式 / 连续失败）与「重新检测」按钮',
+  DIAG_FIELDS.every((s) => cameraSheetSrc.includes(s)),
+  DIAG_FIELDS.filter((s) => !cameraSheetSrc.includes(s)).join(' / ') || `${DIAG_FIELDS.length}/${DIAG_FIELDS.length}`,
+);
+check('诊断区只在抽屉里（不塞回取景画面）', !cameraViewSrc.includes('id="camDiag"') && !cameraViewSrc.includes('id="btnRedetect"'));
+check('诊断区可读性：等宽数字类 + 重新检测接 store 动作', /className="v mo/.test(cameraSheetSrc) && /onClick=\{\(\) => void redetectCam\(\)\}/.test(cameraSheetSrc));
+check('降级时才弹一次 toast、并指路「重新检测」', /STILL_DOWNGRADE_MSG/.test(storeSrc) && /shot\.downgraded/.test(storeSrc) && /重新检测/.test(storeSrc));
+check('相机换流时重置降级状态（startCamera 调 resetCamStillForNewStream）', /resetCamStillForNewStream/.test(srcText('store/cameraRuntime.ts')) && /resetCamStillForNewStream\(\)/.test(storeSrc));
+check('store 镜像了诊断切片（连续失败计数 / 阈值 / 最近结果 / ImageCapture 存在）', /camStillFailures/.test(storeSrc) && /camStillFailLimit/.test(storeSrc) && /camDiag/.test(storeSrc) && /imageCapturePresent/.test(storeSrc));
 check(
   '取景页的 toast 抬到底栏之上（连反馈气泡也不许压快门）',
   /body\.view-cam #toast\{/.test(stylesSrc) && /classList\.toggle\('view-cam'/.test(srcText('App.tsx')),
@@ -184,7 +214,7 @@ check('提示词词库共 32 个词（5 组）', (promptSrc.match(/PROMPT_GROUPS
 check('主题任务占 1 槽位的说明写进了界面（暗房）', /一个主题任务算/.test(darkroomSrc));
 check('相册有「主题作品」分组', /主题作品/.test(albumViewSrc) && /themeAlbumSplit/.test(srcText('store/useAppStore.ts')));
 check('没有付费 / Pro 横幅（设计稿已删，不许加回来）', !/升级 ?Pro|Pro ?版|订阅会员|付费解锁|解锁全部/.test([storeSrc, themeViewSrc, themeCreateSrc, albumViewSrc, darkroomSrc, srcText('components/SettingsDrawer.tsx')].join('\n')));
-check('边拍边收在快门路径上是**同步**收图（不增加 await）', /if \(get\(\)\.collectIntoActiveTheme\(rec\)\) return;/.test(captureBody));
+check('边拍边收在快门路径上是**同步**收图（不增加 await）', /if \(get\(\)\.collectIntoActiveTheme\(rec\)\) \{/.test(captureBody) && !/await[^\n]*collectIntoActiveTheme/.test(captureBody));
 
 // 本地绝对路径不许入库（本机路径泄露）
 const LOCAL_PATH = '/' + 'Users' + '/';
@@ -221,6 +251,8 @@ if (!existsSync(join(DIST, 'app.html'))) {
   check('产物入口是 app.html（源入口不为 index.html 让路）', existsSync(join(DIST, 'app.html')));
   check('产物里有 ImageCapture 与 takePhoto', /ImageCapture/.test(bundle) && /takePhoto/.test(bundle));
   check('产物里有抓帧回落（drawImage）', /drawImage/.test(bundle));
+  check('产物里有取图方式标记（真拍照 / 抓帧）与诊断区（#camDiag / #btnRedetect）', /真拍照/.test(bundle) && /抓帧/.test(bundle) && /camHudInfoShot/.test(bundle) && /camDiag/.test(bundle) && /btnRedetect/.test(bundle));
+  check('产物里有降级告知文案（重新检测入口指路）', /已切换为抓帧/.test(bundle) && /重新检测/.test(bundle));
   check('产物里默认 Base 正确', /api\.klong\.lat\/v1/.test(bundle));
   check('产物里旧默认只剩 1 处（迁移用）', (bundle.match(/api\.openai\.com\/v1/g) || []).length === 1);
   check('产物里列表仍挂 thumb', /\.thumb/.test(bundle));
@@ -323,6 +355,38 @@ if (!pw) {
     check('生图接口挂死时 10 张照片仍全部入库（快门不等网络）', st.photos === 10, `${st.photos} 张`);
     check('队列同步收到 10 条任务', st.queue === 10, `${st.queue} 条`);
     check('产物里的并发上限 = 9（第 10 个起排队）', st.peak === 9 && st.running === 9, `peak=${st.peak} running=${st.running}`);
+
+    // ---- 取图方式可见性 + 相机诊断（v0.10）----
+    await page.evaluate(() => __snapsaga.openCameraSheet());
+    await page.waitForTimeout(350); // React 渲染是异步的：先开抽屉，下一拍再读 DOM
+    const diagSt = await page.evaluate(() => {
+      const txt = (sel) => (document.querySelector(sel) || {}).textContent || '';
+      const markEl = document.querySelector('#camHudInfoShot');
+      const diagEl = document.querySelector('#camDiag');
+      const r = diagEl ? diagEl.getBoundingClientRect() : null;
+      return {
+        mark: (markEl?.textContent || '').trim(),
+        markKind: markEl?.dataset.kind || '',
+        markColor: markEl ? getComputedStyle(markEl).color : '',
+        diagVisible: !!r && getComputedStyle(diagEl).display !== 'none' && r.width > 0 && r.height > 0,
+        diag: txt('#camDiag'),
+        ic: txt('#diagIC'),
+        last: txt('#diagLastStill'),
+        res: txt('#diagRes'),
+        mode: txt('#diagShotMark'),
+        fail: txt('#diagFail'),
+        redetect: !!document.querySelector('#btnRedetect'),
+      };
+    });
+    check('产物取景页左下角有取图方式标记（真拍照 / 抓帧）', /^(真拍照|抓帧)$/.test(diagSt.mark) && /^(still|frame)$/.test(diagSt.markKind), `${diagSt.mark} / ${diagSt.markKind}`);
+    check(
+      '产物抽屉里的诊断区可见且字段齐全',
+      diagSt.diagVisible && diagSt.redetect && /ImageCapture/.test(diagSt.diag) && /最近一次真拍照/.test(diagSt.diag) && /实际分辨率/.test(diagSt.diag),
+      `visible=${diagSt.diagVisible} redetect=${diagSt.redetect} · ${diagSt.diag.replace(/\s+/g, ' ').slice(0, 120)}`,
+    );
+    check('产物诊断区：连续失败计数形如 n/3（降级要降到阈值）', /^\d+\/3$/.test(diagSt.fail.trim()) || /^\d+\/\d+$/.test(diagSt.fail.trim()), diagSt.fail.trim());
+    check('产物诊断区：实际分辨率来自 getSettings()', /相机 \d+×\d+|未知（先打开相机）/.test(diagSt.res), diagSt.res.trim());
+    check('产物诊断区：最近一次 takePhoto 结果可读（未尝试 / 成功…字节…ms / 失败：原因…ms）', /未尝试|成功 · \d+ 字节 · \d+ ms|失败：.+· \d+ ms/.test(diagSt.last.trim()), diagSt.last.trim());
 
     // ---- 主题模式红线（真产物 + 真 store + 真队列）----
     const themeSt = await page.evaluate(() => {

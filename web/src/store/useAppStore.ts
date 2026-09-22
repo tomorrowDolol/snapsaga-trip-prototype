@@ -9,12 +9,21 @@ import { create } from 'zustand';
 import { db } from '../data/db';
 import { themesDb } from '../data/themesDb';
 import { queue, installQueueHooks } from './queueRuntime';
-import { cam, currentStream, ensurePersistOnce, openStream, tuneCamera, shutterShot } from './cameraRuntime';
+import {
+  cam,
+  currentStream,
+  ensurePersistOnce,
+  openStream,
+  redetectCamStill,
+  resetCamStillForNewStream,
+  tuneCamera,
+  shutterShot,
+} from './cameraRuntime';
 import type { QueueCounts } from '../domain/genQueue';
 import { makeThumb, queueThumb } from '../domain/thumbs';
 import { GEN_STRENGTH, STYLES, pickRandomNote, styleByKey } from '../domain/presets';
 import { SCENES, type GridMode } from '../domain/scenes';
-import { camMetaParts } from '../domain/capture';
+import { camMetaParts, hasImageCapture, type StillDiag } from '../domain/capture';
 import { aiCreds, aiBaseSetting, genAutoSetting, loadGeo, saveAiSettings, saveGeo, AI_MODEL_DEFAULT, LS, type GeoPoint } from '../domain/settings';
 import { sunTimes } from '../domain/sun';
 import { fmtTime, saveOrShare, canvasToBlob } from '../domain/media';
@@ -56,6 +65,13 @@ export interface AppState {
   camStill: boolean;
   camRes: string;
   camLastShot: '' | 'still' | 'frame';
+  /** 连续失败计数 / 阈值（相机诊断区显示，红线断言「不许一次失败就永久降级」） */
+  camStillFailures: number;
+  camStillFailLimit: number;
+  /** 最近一次 takePhoto 的结果（成功 / 失败原因 / 耗时 ms / 字节数） */
+  camDiag: StillDiag;
+  /** ImageCapture 这个类在不在 window 上（诊断区如实显示） */
+  imageCapturePresent: boolean;
   flash: boolean;
   /** 水平仪 */
   levelOn: boolean;
@@ -124,6 +140,8 @@ export interface AppActions {
   // 相机
   startCamera(): Promise<void>;
   switchCamera(): Promise<void>;
+  /** 相机抽屉的「重新检测」：重置降级状态并立刻再试一次 takePhoto */
+  redetectCam(): Promise<void>;
   capture(): Promise<void>;
   addPhoto(blob: Blob, shot: 'still' | 'frame'): Promise<PhotoRec>;
   syncCam(): void;
@@ -207,6 +225,9 @@ export interface AppActions {
 
 export type AppStore = AppState & AppActions;
 
+/** 连续失败到阈值、真降级为「仅抓帧」时的那一次提示（只在降级那一刻弹一次） */
+const STILL_DOWNGRADE_MSG = '相机不支持静止图像，已切换为抓帧；可到相机抽屉重新检测';
+
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useAppStore = create<AppStore>()((set, get) => {
@@ -261,6 +282,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
     camStill: cam.still,
     camRes: '',
     camLastShot: '',
+    camStillFailures: cam.stillFailures,
+    camStillFailLimit: cam.stillFailLimit,
+    camDiag: cam.lastStill,
+    imageCapturePresent: hasImageCapture(),
     flash: false,
     levelOn: false,
     levelDeviation: null,
@@ -349,10 +374,12 @@ export const useAppStore = create<AppStore>()((set, get) => {
           v.srcObject = currentStream();
           void v.play().catch(() => {});
         }
-        cam.lastShot = '';
+        // 换了一条 track：上一轮的失败计数不该跟着它（一次失败不许被永久继承）
+        resetCamStillForNewStream();
         cam.res = '';
         await tuneCamera();
-        set({ camReady: true, camRes: cam.res, camStill: cam.still, camFacing: cam.facing, camLastShot: '' });
+        set({ camReady: true, camFacing: cam.facing });
+        get().syncCam();
       } catch (e) {
         const err = e as DOMException;
         showToast('相机打开失败：' + (err.name === 'NotAllowedError' ? '未授权相机权限' : err.message), 3200);
@@ -366,7 +393,27 @@ export const useAppStore = create<AppStore>()((set, get) => {
     },
 
     syncCam() {
-      set({ camRes: cam.res, camStill: cam.still, camLastShot: cam.lastShot, camReady: !!currentStream() });
+      set({
+        camRes: cam.res,
+        camStill: cam.still,
+        camLastShot: cam.lastShot,
+        camStillFailures: cam.stillFailures,
+        camStillFailLimit: cam.stillFailLimit,
+        camDiag: cam.lastStill,
+        imageCapturePresent: hasImageCapture(),
+        camReady: !!currentStream(),
+      });
+    },
+
+    async redetectCam() {
+      const diag = await redetectCamStill();
+      get().syncCam();
+      showToast(
+        diag.status === 'ok'
+          ? `重新检测：真拍照可用 ✓（${diag.bytes} 字节 · ${diag.ms} ms）`
+          : `重新检测：静止图像不可用 —— ${diag.error}`,
+        3200,
+      );
     },
 
     async addPhoto(blob, shot) {
@@ -396,7 +443,10 @@ export const useAppStore = create<AppStore>()((set, get) => {
       get().syncCam();
       const rec = await get().addPhoto(shot.blob, shot.kind);
       // 主题生效中：这张归主题（同步收图 + 同步入队，依然不 await 任何东西）
-      if (get().collectIntoActiveTheme(rec)) return;
+      if (get().collectIntoActiveTheme(rec)) {
+        if (shot.downgraded) showToast(STILL_DOWNGRADE_MSG, 3600);
+        return;
+      }
       const creds = aiCreds();
       if (get().genAuto && creds.base && creds.key) {
         queue.add(rec, styleByKey(get().genStyleKey), GEN_STRENGTH); // 同步入队，立即返回；后台最多 9 并发
@@ -406,6 +456,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
       } else {
         showToast('已收进胶卷 🎞');
       }
+      // 连续失败刚到阈值：明确告知**一次**（后续每张不再重复提示），并给出恢复路径
+      if (shot.downgraded) showToast(STILL_DOWNGRADE_MSG, 3600);
     },
 
     // ---------------- 场景 / 水平仪 ----------------

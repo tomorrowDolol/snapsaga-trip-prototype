@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { camMetaParts } from '../domain/capture';
+import { camDiagParts, camMetaParts } from '../domain/capture';
 import { SCENES } from '../domain/scenes';
 import { STYLES } from '../domain/presets';
 import { aiCreds } from '../domain/settings';
@@ -17,6 +17,10 @@ import { useAppStore } from '../store/useAppStore';
  * 抽屉**只覆盖取景画面**（它挂在 #camWrap 里），所以快门行永远露在外面、任何时刻都能按。
  *
  * 硬约束（e2e / guard 守着，不许动）：`#camMeta` 必须仍在 DOM 里且文本语义不变（分辨率 + 静止图像/抓帧）。
+ *
+ * v0.10 新增「相机诊断」区 `#camDiag`（在 `#camMeta` 之上）：ImageCapture 是否可用、最近一次 takePhoto
+ * 的结果与耗时、实际分辨率、当前取图方式与连续失败计数，外加「重新检测」——用户在 iPhone 独立模式
+ * （添加到主屏）里也能当场自证「真拍照到底行不行」。
  */
 
 /** 焦距档（设计稿 FO）：13 / 26 / 35 / 50 —— 只影响取景预览的数码缩放，不影响出片分辨率 */
@@ -58,7 +62,16 @@ export function CameraSheet({ focal, setFocal, ev, cycleEv, flashMode, cycleFlas
   const camRes = useAppStore((st) => st.camRes);
   const camStill = useAppStore((st) => st.camStill);
   const camLastShot = useAppStore((st) => st.camLastShot);
+  const camStillFailures = useAppStore((st) => st.camStillFailures);
+  const camStillFailLimit = useAppStore((st) => st.camStillFailLimit);
+  const camDiag = useAppStore((st) => st.camDiag);
+  const imageCapturePresent = useAppStore((st) => st.imageCapturePresent);
+  const redetectCam = useAppStore((st) => st.redetectCam);
   const meta = camMetaParts({ res: camRes, still: camStill, lastShot: camLastShot });
+  const diag = camDiagParts(
+    { res: camRes, still: camStill, lastShot: camLastShot, lastStill: camDiag, stillFailures: camStillFailures, stillFailLimit: camStillFailLimit },
+    imageCapturePresent,
+  );
   const ai = aiCreds();
   const aiReady = !!(ai.base && ai.key);
 
@@ -202,6 +215,50 @@ export function CameraSheet({ focal, setFocal, ev, cycleEv, flashMode, cycleFlas
             <button className="pl" id="sunSetup" onClick={goSettings}>
               去设置
             </button>
+          </div>
+
+          {/* 相机诊断：真机（尤其 iPhone 添加到主屏后的独立模式）自证「这次到底是不是真拍照」。
+              用等宽数字；「重新检测」重置降级状态并当场再试一次 takePhoto。 */}
+          <div id="camDiag">
+            <div className="dghead">
+              相机诊断 <span className="hint">取图方式 · 真机自证</span>
+            </div>
+            <div className="dgrow">
+              <span className="k">ImageCapture</span>
+              <span className="v mo" id="diagIC">
+                {diag.imageCapture}
+              </span>
+            </div>
+            <div className="dgrow">
+              <span className="k">最近一次真拍照</span>
+              <span className="v mo" id="diagLastStill">
+                {diag.lastStill}
+              </span>
+            </div>
+            <div className="dgrow">
+              <span className="k">实际分辨率</span>
+              <span className="v mo" id="diagRes">
+                {diag.res}
+              </span>
+            </div>
+            <div className="dgrow">
+              <span className="k">取图方式</span>
+              <span className={`v mo${diag.warn ? ' warn' : ' gold'}`} id="diagShotMark" data-kind={diag.warn ? 'frame' : 'still'}>
+                {diag.mode}
+              </span>
+            </div>
+            <div className="dgrow">
+              <span className="k">连续失败</span>
+              <span className="v mo" id="diagFail">
+                {diag.failures}
+              </span>
+            </div>
+            <button className="mini ghost" id="btnRedetect" onClick={() => void redetectCam()}>
+              重新检测
+            </button>
+            <div className="dgnote">
+              连续失败 {camStillFailLimit} 次才会标记「仅抓帧」；改过系统设置或从主屏独立模式打开后，点「重新检测」当场再试一次。
+            </div>
           </div>
 
           {/* 诊断信息：分辨率 + 本次取景方式（静止图像 / 抓帧）。不进构图，放抽屉里。 */}

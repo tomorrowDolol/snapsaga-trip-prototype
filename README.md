@@ -8,9 +8,9 @@
 | 内容 | 位置 |
 |------|------|
 | 📱 **出行原型（单文件，v0.6 冻结）** | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/> |
-| ⚛️ **工程化版本（React + TS，v0.9）** | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> · 说明见 [web/README.md](web/README.md) |
+| ⚛️ **工程化版本（React + TS，v0.10）** | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> · 说明见 [web/README.md](web/README.md) |
 | 📊 **当前状态 / 活跃问题 / 版本摘要（先读这个）** | [docs/iteration-log.md](docs/iteration-log.md) |
-| 🗄 迭代历史归档（v0.1–v0.9 明细、实测数字） | [docs/iteration-history.md](docs/iteration-history.md) |
+| 🗄 迭代历史归档（v0.1–v0.10 明细、实测数字） | [docs/iteration-history.md](docs/iteration-history.md) |
 | 🎨 产品设计稿（交互 HTML，可在线打开） | [docs/design-v0.1.html](docs/design-v0.1.html) · [在线版](https://tomorrowdolol.github.io/snapsaga-trip-prototype/docs/design-v0.1.html) |
 | 🗓 P0 落地计划（8 周 WBS / 验收门槛 / 风险） | [docs/p0-plan.md](docs/p0-plan.md) |
 | 🤖 AI 代理工作指南（改代码前先读） | [AGENTS.md](AGENTS.md) |
@@ -18,7 +18,10 @@
 > 当前原型 v0.6（单文件）：拍照与 AI 生图解耦——按快门只存胶卷，生图进后台队列，完成后归档到「AI 相册」。
 > v0.7 起同一套功能另有工程化版本 `web/`（React 19 + TypeScript + Vite），v0.8 起 `web/` **以「主题模式」为中心**
 > （写一句主题 → 选 2–9 张图 → 合成一张 / 统一风格；统一风格可「边拍边收」），并发上限按设计稿提到 **9**；
-> v0.9 起取景页是**干净相机界面**（取景画面占满、底栏固定、辅助 UI 全收进可下拉关闭的相机抽屉）。
+> v0.9 起取景页是**干净相机界面**（取景画面占满、底栏固定、辅助 UI 全收进可下拉关闭的相机抽屉）；
+> v0.10 起**取图方式一眼可见**：取景页左下角小字标「真拍照 / 抓帧」（金 / 橙），相机抽屉新增「相机诊断」区
+> （ImageCapture 可用性、最近一次 `takePhoto` 结果与耗时、实际分辨率、连续失败计数）与「重新检测」；
+> 同时修掉「`takePhoto` 失败一次就整个会话静默降级为抓帧」的缺陷（改为连续失败 3 次才降级 + toast 告知一次）。
 > **两者同源同库**：同一个 IndexedDB（`snapsaga` 仍是 v2，主题记录另存 `snapsaga_themes`）、同一批 localStorage 键，数据直接复用。
 
 ## 文档地图
@@ -30,7 +33,7 @@
 | [AGENTS.md](AGENTS.md) | **AI 代理的操作契约**：铁律 + 标准改动流程（改代码前先完整读） |
 | [README.md](README.md) | 本文件：总览、线上入口、目录结构、**部署形状（单一真源）**、本地验证、正式版路线 |
 | [docs/iteration-log.md](docs/iteration-log.md) | 面向迭代的**首屏**：当前状态 + 活跃已知问题 + 设计内取舍 + 版本摘要 + 下一版候选 |
-| [docs/iteration-history.md](docs/iteration-history.md) | **归档**：v0.1–v0.9 详细验证记录、实测数字表、已解决 K 条目原文 |
+| [docs/iteration-history.md](docs/iteration-history.md) | **归档**：v0.1–v0.10 详细验证记录、实测数字表、已解决 K 条目原文 |
 | [docs/p0-plan.md](docs/p0-plan.md) | **工程路线真源**：P0 8 周计划、技术决策 D1–D5、里程碑 Gate、风险登记簿 |
 | [docs/design-v0.1.html](docs/design-v0.1.html) | **产品功能定义真源**：定位 / 四大模块 / 架构 / Prompt 策略 / 路线图 |
 | [web/README.md](web/README.md) | 工程化版专属：目录、命令、数据兼容（键名/库名）、验证矩阵、未覆盖项 |
@@ -39,7 +42,7 @@
 
 ```
 ├── index.html            # 出行原型 v0.6（单文件应用，无构建、无依赖）
-├── web/                  # 工程化版本 v0.9（React 19 + TS 严格 + Vite + Tailwind + Zustand）
+├── web/                  # 工程化版本 v0.10（React 19 + TS 严格 + Vite + Tailwind + Zustand）
 │   ├── app.html          # Vite 源入口（改界面改它）
 │   ├── index.html        # 构建生成的入口页（不要手改；Pages 的 /web/ 就是它）
 │   ├── src/              # domain（纯逻辑）/ data（IndexedDB）/ store / components / debug / test
@@ -52,7 +55,7 @@
 │   ├── design-v0.1.html      # 产品设计稿（功能定义真源）
 │   ├── p0-plan.md            # P0 落地计划（工程路线真源）
 │   ├── iteration-log.md      # 当前状态 / 活跃问题 / 版本摘要（首屏）
-│   └── iteration-history.md  # 迭代历史归档（v0.1–v0.9 明细）
+│   └── iteration-history.md  # 迭代历史归档（v0.1–v0.10 明细）
 ├── scripts/
 │   ├── assemble-site.mjs     # 组装要发布的站点目录（CI 与本地同一份逻辑）
 │   └── check-docs.mjs        # 文档防腐烂检查（链接 / K 编号 / 文档地图 / 版本号）
@@ -71,16 +74,22 @@ GitHub Pages 由 **GitHub Actions** 发布（`build_type: workflow`）。推送 
 `.github/workflows/deploy-pages.yml`：
 
 ```
-npm ci → npm test（53 项）→ npm run build → 装 Playwright Chromium → npm run guard（61 项）
+npm ci → node scripts/check-docs.mjs → npm test（162 项）→ npm run build
+        → 装 Playwright Chromium → npm run guard（136 项）
         → node scripts/assemble-site.mjs _site → upload-pages-artifact → deploy-pages
 ```
+
+> CI 里那一步的**显示名**仍写着「单测（53 项，jsdom）」（命令是 `npm test`，数字是旧的）——
+> 改 `.github/workflows/` 需要 token 带 `workflow` scope，本机推不动，所以只在这里记一笔（见
+> [iteration-history v0.8](docs/iteration-history.md#v08-主题模式两种产出-边拍边收-并发-9)）。
+> 真数字以本节与 [web/README 验证矩阵](web/README.md#验证矩阵npm-run-verify) 为准。
 
 站点形状由 [scripts/assemble-site.mjs](scripts/assemble-site.mjs) 定义（CI 与本地同一份逻辑，缺失产物会直接报错）：
 
 | 线上路径 | 来源 | 说明 |
 |----------|------|------|
 | `/` | 根 `index.html` | 单文件原型，冻结在 v0.6 |
-| `/web/` 的功能面 | `web/dist/**` | v0.8 起以「主题模式」为中心：主题（两种产出 / 边拍边收）· 暗房（并发 9）· 相册三分组；v0.9 起取景页是干净相机界面（取景画面占满 + 相机抽屉） |
+| `/web/` 的功能面 | `web/dist/**` | v0.8 起以「主题模式」为中心：主题（两种产出 / 边拍边收）· 暗房（并发 9）· 相册三分组；v0.9 起取景页是干净相机界面（取景画面占满 + 相机抽屉）；v0.10 起取图方式一眼可见（真拍照 / 抓帧 + 相机诊断 + 重新检测） |
 | `/docs/` `/tools/` | 同目录 | 文档与工具页（含 `ios-probe.html`） |
 | `/web/` | `web/index.html` + `web/dist/**` | React 版（入口页与产物都由 `npm run build` 生成） |
 

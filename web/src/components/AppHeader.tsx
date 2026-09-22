@@ -25,7 +25,7 @@ export function AppHeader() {
         <div className="logo">
           拾光<em>·</em>SnapSaga
         </div>
-        <div className="sub">TRIP PROTOTYPE v0.9 · REACT</div>
+        <div className="sub">TRIP PROTOTYPE v0.10 · REACT</div>
       </div>
       <div className="right">
         <span className="sbTitle mo" id="sbR">

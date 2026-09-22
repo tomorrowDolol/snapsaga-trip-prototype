@@ -160,8 +160,10 @@ try {
 
   console.log('[0] 页面加载 + 相机 stub');
   const verText = await page.$eval('header .sub', (e) => e.textContent);
-  const verNum = parseFloat((verText.match(/v(\d+\.\d+)/) || [0, '0'])[1]);
-  check('版本号已升过 v0.1（不写死具体版本）', verNum >= 0.2, verText);
+  // 按 major/minor 两个数比，不用 parseFloat：v0.10 会被 parseFloat 读成 0.1（比 v0.2 还小）
+  const verMatch = verText.match(/v(\d+)\.(\d+)/) || [0, '0', '0'];
+  const afterV01 = Number(verMatch[1]) > 0 || Number(verMatch[2]) >= 2;
+  check('版本号已升过 v0.1（不写死具体版本）', afterV01, verText);
   await page.click('#startCam');
   await page.waitForFunction(() => document.querySelector('#video').videoWidth > 0, null, { timeout: 8000 });
   check('相机 stub 就绪（videoWidth > 0）', true, 'videoWidth=' + (await page.$eval('#video', (v) => v.videoWidth)));

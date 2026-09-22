@@ -8,6 +8,8 @@
   --ln:rgba(255,255,255,.09); --ln2:rgba(255,255,255,.17);
   --fg:#EDF1F1; --dim:#8C9A9C; --dim2:#5F6C6E; --soft:#8C9A9C;
   --gold:#E9B44C; --teal:#6FD3C7; --red:#FF6B6B; --vi:#9C7BFF;
+  /* 抓帧 = 画质降级：警示橙（与金/红都区分得开的那个） */
+  --shotwarn:#FF9A4D;
   --ink:#0A0C0D; --accent:#E9B44C; --paper:#14181A; --line:rgba(255,255,255,.09);
   --mo:ui-monospace,Menlo,"SF Mono",monospace;
 }
@@ -86,6 +88,17 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 #camPlaceholder p{font-size:13px; max-width:280px; color:#cfe0e0}
 #camMeta{margin:12px 16px 0; font-size:11px; color:var(--dim); font-family:var(--mo); line-height:1.5}
 #camMeta b{color:var(--gold); font-weight:700}
+/* 相机诊断（v0.10）：抽屉里自证「真拍照 / 抓帧」。等宽数字，一列 key → value。 */
+#camDiag{margin:16px 16px 0; padding:11px 12px 12px; border:1px solid var(--ln); border-radius:12px; background:rgba(255,255,255,.02)}
+#camDiag .dghead{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:var(--dim)}
+#camDiag .dghead .hint{font-size:10px; font-weight:600; letter-spacing:0; text-transform:none; color:var(--dim2)}
+#camDiag .dgrow{display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:11.5px}
+#camDiag .dgrow .k{color:var(--dim); flex:0 0 auto}
+#camDiag .dgrow .v{color:var(--fg); text-align:right; word-break:break-word; font-size:11px}
+#camDiag .dgrow .v.gold{color:var(--gold); font-weight:700}
+#camDiag .dgrow .v.warn{color:var(--shotwarn); font-weight:700}
+#camDiag #btnRedetect{width:100%; margin-top:10px}
+#camDiag .dgnote{margin-top:8px; font-size:10.5px; color:var(--dim2); line-height:1.5}
 #startCam{background:var(--gold); color:#20170a; font-weight:800; font-size:15px; padding:12px 30px; border-radius:999px}
 #gridLayer{position:absolute; inset:0; pointer-events:none; z-index:5; display:none}
 #gridLayer svg{width:100%; height:100%}
@@ -121,6 +134,9 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
   border:1px solid rgba(255,255,255,.12); color:#DDE6E6; font-size:10px;
 }
 #camHudInfo em{font-style:normal; color:var(--gold); font-size:9px}
+/* 取图方式标记（v0.10）：真拍照 = 金（正常色），抓帧 = 橙（画质降级，警示） */
+#camHudInfo .shot{color:var(--gold); font-weight:700; font-size:10px}
+#camHudInfo .shot.warn{color:var(--shotwarn)}
 /* 底部读数行：直方图（左）/ 曝光刻度（中）/ 太阳弧（右） */
 .hist{position:absolute; left:12px; bottom:38px; width:58px; height:22px; display:flex; align-items:flex-end; gap:1.5px; opacity:.8; z-index:5; pointer-events:none}
 .hist i{flex:1; background:rgba(255,255,255,.6)}

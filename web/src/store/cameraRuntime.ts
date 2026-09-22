@@ -5,8 +5,12 @@ import {
   ensurePersist,
   grabStill,
   grabFrameFromVideo,
+  imageCaptureCtor,
+  redetectStill,
+  resetStillForNewStream,
   type CamState,
   type GrabEnv,
+  type StillDiag,
   type StillShot,
 } from '../domain/capture';
 
@@ -47,14 +51,24 @@ export async function tuneCamera(): Promise<void> {
 
 export function browserGrabEnvFor(video: HTMLVideoElement): GrabEnv {
   return {
-    ImageCaptureCtor: (window as unknown as { ImageCapture?: GrabEnv['ImageCaptureCtor'] }).ImageCapture,
+    ImageCaptureCtor: imageCaptureCtor(),
     grabFrame: () => grabFrameFromVideo(video),
   };
+}
+
+/** 换流（打开相机 / 翻转镜头）：重置降级状态与诊断（见 capture.ts 的 resetStillForNewStream） */
+export function resetCamStillForNewStream(): void {
+  resetStillForNewStream(cam);
 }
 
 /** 快门取图：只产出 Blob，不碰 AI / 队列 / 网络 */
 export function shutterShot(video: HTMLVideoElement): Promise<StillShot> {
   return grabStill(browserGrabEnvFor(video), videoTrack(), cam);
+}
+
+/** 相机抽屉的「重新检测」：重置降级状态并立刻试一次 takePhoto（不产照片） */
+export function redetectCamStill(): Promise<StillDiag> {
+  return redetectStill({ ImageCaptureCtor: imageCaptureCtor() }, videoTrack(), cam);
 }
 
 export function ensurePersistOnce(): void {

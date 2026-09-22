@@ -1,11 +1,89 @@
 # 迭代历史（归档）
 
 > **这是归档文件，按需查证即可，不要当首屏读。**
-> v0.1–v0.9 的详细记录——每版改动点、验证记录、实测数字、已解决 K 条目原文——都在这里，事实不丢。
+> v0.1–v0.10 的详细记录——每版改动点、验证记录、实测数字、已解决 K 条目原文——都在这里，事实不丢。
 >
 > - 当前状态 / 活跃问题 / 版本摘要 → [`iteration-log.md`](iteration-log.md)
 > - 部署形状（单一真源）→ [`../README.md`](../README.md#部署形状)
 > - 已解决 / 已过期 K 条目原文 → [K 条目存档](#k-条目存档)
+
+## v0.10 · 相机取图方式可见 + 降级不再锁死（真拍照 / 抓帧一眼可见）
+
+（2026-09-23）
+
+### 背景
+
+用户反馈：「拍照还是通过录像？」「画质是不是掉了？」——两个已被确认的现状：
+
+1. **真缺陷**：`grabStill` 里 `takePhoto` 抛错就 `state.still = false`，**整个会话不再重试**；
+   之后每一张都静默变成 canvas 抓帧（iPhone 实测：静止图像约 3.1 MB，抓帧约 0.55 MB，**差 5.6 倍**），
+   用户完全无从察觉。
+2. **可见性**：`camMetaParts()` 早就给出「支持静止图像 / 仅能抓帧」与「本次：静止图像 / 抓帧」，
+   但 v0.9 取景页改版把它移进了相机抽屉，取景页左下角只剩 `ISO 400 · 35mm · f/1.8 · 1/125` ——
+   **拍照时看不见取图方式**。
+
+背景事实：iOS 26.6 Safari **标签页**实测 `takePhoto` 可用（约 3.1 MB）；但**添加到主屏后的独立模式
+（standalone）**下 WebKit 行为是否一致没有实测手段。本次不只是修逻辑，还要**把「自证」能力交给用户**。
+
+### 改动点
+
+1. **降级不再永久**（`domain/capture.ts`）
+   - 新增 `STILL_FAIL_LIMIT = 3`（可配置常量）与 `CamState.stillFailures / stillFailLimit / lastStill`。
+   - `grabStill` **每张都先试 `takePhoto`**：单次失败只回落本次；连续失败到阈值才 `still = false`；
+     成功一次把计数归零。返回值加 `downgraded` 位（只在刚到阈值那一张为 true）。
+   - `capture()` 在 `downgraded` 为 true 时弹一次 toast「相机不支持静止图像，已切换为抓帧；
+     可到相机抽屉重新检测」（3600 ms），之后不再重复。
+   - 降级后不再每张白等一次失败（跳过一次注定失败的 `takePhoto`）。
+   - 换流（打开相机 / 翻转镜头）调 `resetStillForNewStream()`：这是另一条 track，失败计数不继承。
+2. **取景页可见**（`components/CameraView.tsx` + `styles.css`）
+   - 左下角 `#camHudInfo` 尾部新增 `#camHudInfoShot`（纯函数 `shotMark()` 决定文案与颜色）：
+     拍过就按最近一张算（`真拍照` / `抓帧`），没拍过就按当前能力算；`真拍照` = 金 `--gold`，
+     `抓帧` = 橙 `--shotwarn (#FF9A4D)` 警示色。
+3. **相机抽屉「相机诊断」区**（`components/CameraSheet.tsx`，纯函数 `camDiagParts()`）
+   - `#camDiag`：`#diagIC`（ImageCapture 存在 / 是否已验证）、`#diagLastStill`（最近一次 takePhoto：
+     成功·字节·ms / 失败·原因·ms / 未尝试）、`#diagRes`（`getSettings()` 实际分辨率）、
+     `#diagShotMark`（当前取图方式，抓帧时橙色）、`#diagFail`（连续失败 n/3），等宽数字。
+   - `#btnRedetect`「重新检测」：`redetectStill()` 重置降级状态 + 立刻试一次 `takePhoto`（不产照片、
+     不抓帧），结果写回诊断；成功时清空 `lastShot`（上一张确实是抓帧，但用户刚要求「从现在起」重算）。
+4. **不动的地方**：快门路径仍然只 await「本地取图 + 写 IndexedDB」（guard 断言仍是 2 处 await）；
+   `takePhoto` 优先与抓帧回落保留；`applyConstraints` 仍只对 `getCapabilities()` 支持项下发；
+   根 `index.html` 一行未改（仍 v0.6）。
+
+### 三态与实测数字（真 Chromium + `ImageCapture` stub，stub 的 `takePhoto` 故意 sleep 300 ms）
+
+| 态 | 取图 | 快门点击同步返回 | 照片落库 | 标记 | `stillFailures` |
+|----|------|------------------|----------|------|------------------|
+| ① `takePhoto` 成功 | `still`（12345 B stub） | 0.7 ms | 320 ms | `真拍照`（金 `rgb(233,180,76)`） | 0/3 |
+| ② 单次失败回落 | `frame`（2562 B 抓帧） | 1.1 ms | 331 ms | `抓帧`（橙 `rgb(255,154,77)`） | 1/3（**仍可重试**） |
+| ③ 连续失败 3 次 | `frame` | 0.1 ms | 313 ms | `抓帧`（橙） | 3/3（标记仅抓帧） |
+| ③′ 降级后第 4 张 | `frame` | 0.6 ms | **23 ms** | `抓帧`（橙） | 3/3（不再白等 300 ms） |
+| ②→① 重新检测成功 | — | — | — | `真拍照`（金） | 0/3，诊断 `成功 · 12345 字节 · 301 ms` |
+
+- 单次失败后第 2 张**确实又调用了一次** `takePhoto`（stub 调用计数 1 → 2）并成功 → 标记从橙回到金，
+  失败的 photo 记录 `shot` 字段始终如实（历史真相在胶卷数据里，不靠界面记忆）。
+- 产物运行时（真 Chromium 加载 dist、无 stub 的真实 `ImageCapture` + canvas 流）：真实报错
+  `setPhotoOptions failed · 16 ms`、分辨率 `相机 640×480`、`3/3`、`#camHudInfoShot` = `抓帧/frame`。
+
+### 验证情况
+
+- `npm run verify` **退出码 0**：162 单测（相机取图 16 → 29）· 231 e2e（6 组）· 136 guard。
+- 单测新增：三态（成功 / 单次失败仍可重试 / 连续 3 次才降级 + 第 4 张不再白等）、阈值常量、
+  `shotMark` 文案与警示位、`camDiagParts` 字段与文案、`redetectStill`（成功恢复 / 无 ImageCapture / 相机未开 / 换流重置）。
+- e2e 新增两组：`[6] 降级不再一次性`（单次失败 → 抓帧但可重试 → stub 修好后第 2 张恢复真拍照、
+  颜色由 `rgb(255,154,77)` → `rgb(233,180,76)`）、`[7] 连续 3 次才降级 + toast 只一次 + 抽屉诊断区 + 重新检测`。
+  适配说明：旧断言「失败后不再重试（`cam.still` 置 false）」与新需求直接矛盾，已替换为
+  「单次失败仍可重试（`still=true` / 1/3）」+「连续 3 次才 `still=false`」两条更强的断言，未放松。
+- guard 新增 24 项：源码侧（阈值常量 / 达到阈值才降级 / 成功归零 / 换流重置 / `redetectStill` / `shotMark` / `camDiagParts` /
+  取景页标记 + 抽屉诊断字段 + 只在抽屉里 / 降级 toast 指路）、产物侧（`真拍照`/`抓帧`/`camHudInfoShot`/`camDiag`/`btnRedetect`/
+  降级文案被打进包）、产物运行时（真 Chromium 读 `#camHudInfoShot` 与 `#camDiag` 四个字段）。
+- 截图：`web/e2e/artifacts/capture-viewfinder-{still,frame}-mark.png`、`capture-camdiag-{downgraded,redetected}.png`
+  （产物目录不入库）。
+
+### 当时登记的问题
+
+- **K22 扩写**：真机独立模式（添加到主屏）下 `takePhoto` 是否可用仍未实测——本版交付的是「让用户在真机上
+  能自己看到并自证」的能力（取景页标记 + 抽屉诊断 + 重新检测），不是「已在真机验过」。
+- 无新增 K 编号。
 
 ## v0.9 · 取景页改版（干净相机界面 + 相机抽屉）
 

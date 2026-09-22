@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { shotMark } from '../domain/capture';
 import { SCENES } from '../domain/scenes';
 import { sceneArtSvg } from '../domain/sceneArt';
 import type { PhotoRec, ThemeRec } from '../domain/types';
@@ -64,6 +65,8 @@ export function CameraView() {
   const [hintNonce, setHintNonce] = useState(0);
   const zoom = FOCALS.find((f) => f.mm === focal)?.zoom ?? 1;
   const pending = counts.run + counts.queued;
+  // 取图方式标记：这张到底走的是「真拍照」（ImageCapture.takePhoto）还是「抓帧」（画质降级的兜底）
+  const mark = shotMark({ still: s.camStill, lastShot: s.camLastShot });
 
   // 构图提示：单行、3.5 s 后自动淡出；点一下取景画面可再显示（不再常驻大卡占构图）
   useEffect(() => {
@@ -212,10 +215,14 @@ export function CameraView() {
           ) : null}
         </div>
 
-        {/* 左下角一行小字：ISO + 焦距（点开抽屉） */}
-        <button id="camHudInfo" title="相机参数" onClick={s.toggleCamSheet}>
+        {/* 左下角一行小字：ISO + 焦距 + **取图方式**（点开抽屉）。取图方式直接决定画质，
+            必须拍照时就看得见：真拍照 = 金，抓帧 = 橙色警示。 */}
+        <button id="camHudInfo" title="相机参数 · 取图方式" onClick={s.toggleCamSheet}>
           <span className="mo">
             ISO {ISO[s.sceneIdx]} · {focal}mm · f/1.8 · {SHUTTER[s.sceneIdx]}
+          </span>
+          <span className={`mo shot${mark.warn ? ' warn' : ''}`} id="camHudInfoShot" data-kind={mark.kind}>
+            {mark.label}
           </span>
           <em>▴</em>
         </button>

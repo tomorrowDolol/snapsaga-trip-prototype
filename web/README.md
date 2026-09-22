@@ -13,7 +13,6 @@ v0.8 起 `web/` 以「**主题模式**」为中心（视觉与信息架构以主
 - **并发 9 / 多图 9 / 一个主题任务只占 1 个槽位**（槽位显示 `k/n` 分张进度）。
 
 v0.9 起**取景（拍照）页是干净相机界面**：
-
 - **取景画面占满**（`#camWrap` 不再设最小高度、`#view-cam` 不滚动），页面与视图都不需要滚动；
 - **固定底栏**：一行最近拍摄（最多 6 + ＋）+ 一行 `[📷相机][大快门][🔄翻转]`，快门在任何支持的高度下
   都完整可见且不被任何元素覆盖；
@@ -25,6 +24,16 @@ v0.9 起**取景（拍照）页是干净相机界面**：
   构图提示是**单行 + 3.5 s 自动淡出 + 点一下再显示**。
 
 > 铁律仍然成立：**根 `index.html` 一行都不改**。两个入口同源、同库、同 localStorage 键，互相读得懂对方的数据。
+
+v0.10 起**相机取图方式一眼可见、降级不再锁死**（修两个已确认的问题：以前 `takePhoto` 失败一次就整个会话
+静默降级为抓帧，且取景时看不到取图方式）：
+
+- **每张都先试 `takePhoto`**：单次失败只回落**本次**，**连续失败 3 次**（`STILL_FAIL_LIMIT`，可配置）才标记
+  「仅抓帧」；成功一次把计数归零；降级那一刻 **toast 告知一次**；换流（打开相机 / 翻转镜头）重置计数。
+- **取景页左下角** `#camHudInfoShot`：`真拍照`（金） / `抓帧`（橙警示）——拍过按最近一张算，没拍过按能力算。
+- **相机抽屉「相机诊断」区** `#camDiag`：ImageCapture 是否可用 / 最近一次 `takePhoto` 的结果与耗时 ms /
+  实际分辨率（`getSettings()`）/ 当前取图方式 / 连续失败 n/3，外加 **`#btnRedetect`「重新检测」**
+  （重置降级状态并当场再试一次 `takePhoto`）——iPhone 添加到主屏后的**独立模式**里也能自己验证。
 
 ## 线上地址
 
@@ -55,7 +64,7 @@ web/
 │   │   ├── promptBuilder.ts   # 提示词词库（5 组 32 词）+ 拼装 + 质量提示
 │   │   ├── collage.ts         # 合成一张：布局几何（网格/无缝/故事板）+ canvas 拼图
 │   │   ├── sceneArt.ts        # 8 张场景插画 + 相机机身 + 胶卷盒（内联 SVG，逐值搬迁自设计稿）
-│   │   ├── capture.ts         # 静止图像优先 + 一次性抓帧回落 + 按能力下约束
+│   │   ├── capture.ts         # 静止图像优先 + 降到阈值的抓帧回落 + 按能力下约束 + 取图方式/诊断纯函数
 │   │   ├── thumbs.ts          # 缩略图（最长边 320 / jpeg .72）
 │   │   ├── settings.ts        # localStorage 键名 + AI Base 取值逻辑
 │   │   ├── aiRedraw.ts        # 唯一 AI 通道（aiRedrawCore）；主题任务也走它（提示词伪装成 EditStyle）
@@ -70,7 +79,7 @@ web/
 │   ├── store/                 # Zustand：useAppStore（含主题 slice）+ 相机运行时 + 队列单例
 │   ├── hooks/useObjectUrl.ts  # blob → objectURL，卸载即回收
 │   ├── components/            # 视图与面板（id/类名与原型对齐，旧验收脚本可直接跑）
-│   │   └── CameraSheet.tsx    # 取景页的相机抽屉（v0.9：辅助 UI 全在里面，只盖取景画面不挡快门）
+│   │   └── CameraSheet.tsx    # 取景页的相机抽屉（v0.9：辅助 UI 全在里面；v0.10 加「相机诊断」区 + 重新检测）
 │   ├── debug/bridge.ts        # window.__snapsaga + 兼容旧脚本的全局名（只读）
 │   └── test/                  # Vitest（jsdom）单测
 ├── e2e/                       # Playwright 验收脚本（跑 dist 产物）；artifacts/ 是截图输出（不入库）
@@ -134,9 +143,9 @@ npm run verify     # build → test → guard → e2e 一条龙
 
 | 层 | 工具 | 数量 | 说明 |
 |----|------|------|------|
-| 单测 | Vitest + jsdom | **149** 个测试（10 个文件） | 队列调度（并发峰值 9 / 主题任务占 1 槽位 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）9 · 主题模型（状态机 / 两条上限 9 / 产出条数）22 · 提示词拼装 14 · 拼图布局与合成 27 · 场景插画 18 · 缩略图 14 · 相机取图 16 · AI Base 11 · 太阳算法等价性 3 |
-| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **206** 项 | 主链路 36（并发 9）/ **主题模式 63** / **取景页几何与相机抽屉 67（v0.9 新）** / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
-| 红线 guard | node + Playwright | **112** 项 | 源码侧 68 / 产物侧 25 / 产物运行时 12 / 子路径部署冒烟 7 |
+| 单测 | Vitest + jsdom | **162** 个测试（10 个文件） | 队列调度（并发峰值 9 / 主题任务占 1 槽位 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）9 · 主题模型（状态机 / 两条上限 9 / 产出条数）22 · 提示词拼装 14 · 拼图布局与合成 27 · 场景插画 18 · 缩略图 14 · **相机取图 29**（三态 / 阈值 / 诊断 / 重新检测）· AI Base 11 · 太阳算法等价性 3 |
+| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **231** 项 | 主链路 36（并发 9）/ **主题模式 63** / **取景页几何与相机抽屉 67（v0.9 新）** / 缩略图与增量 13 / **拍照三环境与能力约束 42（v0.10 从 17 扩到 42：降级不再一次性 + 诊断区 + 重新检测）** / AI 默认 Base 10 |
+| 红线 guard | node + Playwright | **136** 项 | 源码侧 85 / 产物侧 27 / 产物运行时 17 / 子路径部署冒烟 7 |
 | 构建 | tsc（严格）+ vite | — | `npm run build` 零错误 |
 
 主题模式专项 e2e（`e2e/acceptance-theme-mode.e2e.mjs`，63 项）四个场景：
@@ -165,6 +174,16 @@ npm run verify     # build → test → guard → e2e 一条龙
 
 截图（人工确认「画面干净、快门明显、构图无遮挡」，产物不入库）：`e2e/artifacts/camera-<视口>-sheet-<closed|open>.png`。
 
+相机取图专项 e2e（`e2e/acceptance-capture.e2e.mjs`，42 项，只 stub 相机与 `ImageCapture`）：
+
+1. **三环境**：支持 `ImageCapture` → 照片就是 `takePhoto` 的字节数；`takePhoto` 抛错 → **本次**回落抓帧
+   （`still` 仍为 true / 计数 1/3，下一张还会重试）；浏览器没有 `ImageCapture` → 抓帧照常可用（连拍两张）。
+2. **降级不锁死（[6]）**：第 1 张失败标记「抓帧」橙色，把 stub 改回成功 → 第 2 张**确实又调用了一次**
+   `takePhoto` 并成功，标记从橙色回到金色、`#camMeta` 回到「本次：静止图像」。
+3. **阈值与告知（[7]）**：连续失败 2 次仍可重试；第 3 次才 `still=false` + 标记「仅抓帧」，toast 只弹一次
+   （带「重新检测」指路），第 4 张不再白等一次失败；抽屉诊断区五个字段可读 + 「重新检测」把状态恢复为真拍照。
+   实测数字：快门同步返回 **0.1–1.1 ms**，真拍照落库 320 ms、抓帧回落 331 ms、降级后只抓帧 **23 ms**。
+
 e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check/*.cjs` 与 `ss_e2e.cjs`），
 **断言逐条保留、未放松**。两处必要适配（都是"换了实现方式"，不是放宽）：
 
@@ -180,9 +199,10 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
 
 ## 未覆盖 / 已知限制
 
-- **真机相机路径仍未在 CI 里跑**：e2e 用 canvas 流 + ImageCapture stub，覆盖了三环境与降级逻辑，
-  但真机 `takePhoto` 的分辨率提升只能靠 `../tools/ios-probe.html` 在手机上实测
-  （这条由 iteration-log 的 **K22** 跟踪；K12/K13/K14 的真机结论见
+- **真机相机路径仍未在 CI 里跑**：e2e 用 canvas 流 + ImageCapture stub，覆盖了三环境、降级阈值与「重新检测」，
+  但真机 `takePhoto` 的分辨率提升只能靠 `../tools/ios-probe.html` 或**应用内自证**（取景页左下角取图方式标记 +
+  抽屉「相机诊断」+「重新检测」）在手机上实测。**iPhone 添加到主屏后的独立模式（standalone）下 `takePhoto`
+  是否可用仍未实测**（这条由 iteration-log 的 **K22** 跟踪；K12/K13/K14 的真机结论见
   [iteration-history 的 K 条目存档](../docs/iteration-history.md#k-条目存档)）。
 - **取景页的几何只在 Chromium + 390×844 / 390×664 两个视口下量过**：真机 Safari 带工具栏时可视高度更矮，
   且 `env(safe-area-inset-bottom)` 会让底栏变高、取景画面占比随之略降（仍 > 60%，因为取景画面是 `flex:1`）。

@@ -12,13 +12,13 @@
 | 入口 | 版本 | 技术栈 | 线上地址 |
 |------|------|--------|----------|
 | 根 `index.html` | **v0.6（冻结）** | 单文件 HTML/CSS/JS，无构建、无依赖 | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/> |
-| `web/` | **v0.9** | React 19 + TS 严格 + Vite + Tailwind + Zustand | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> |
+| `web/` | **v0.10** | React 19 + TS 严格 + Vite + Tailwind + Zustand | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> |
 
-<!-- check-docs: root-version=v0.6 web-version=v0.9 —— 上面两个版本号由 scripts/check-docs.mjs 与页头比对 -->
+<!-- check-docs: root-version=v0.6 web-version=v0.10 —— 上面两个版本号由 scripts/check-docs.mjs 与页头比对 -->
 
 - **部署**：Pages 由 GitHub Actions 发布（`build_type: workflow`），推送 `main` 即构建 + 门禁 + 发布。
   站点形状（`assemble-site.mjs`、`/web/` 入口、`dist` 不提交）**只在 [`../README.md#部署形状`](../README.md#部署形状) 写一份**。
-- **验证矩阵**（在 `web/` 跑 `npm run verify`）：149 个单测 · 206 项 e2e · 112 项 guard；分层说明见 [`../web/README.md`](../web/README.md)。
+- **验证矩阵**（在 `web/` 跑 `npm run verify`）：162 个单测 · 231 项 e2e · 136 项 guard；分层说明见 [`../web/README.md`](../web/README.md)。
 - **产品与路线真源**：功能定义 [`design-v0.1.html`](design-v0.1.html)，工程路线 [`p0-plan.md`](p0-plan.md)（本日志不做定义）。
 - **两个入口的分工（v0.8 起）**：根原型冻结在 v0.6（不做主题模式）；`web/` 是功能演进主线，
   视觉与信息架构以「主题模式」设计稿为准（深底 + 琥珀金、六个 tab：取景·主题·胶卷·暗房·相册·设置）。
@@ -37,7 +37,7 @@
 | K18 | 缩略图额外占存储（实测约 30 KB/张，相对原图约 3%）；本版之前的照片首次打开会触发一次性后台回填 | 存储略增；首次打开有后台解码活动 | 可接受；需要时在设置里提供「清理缩略图」 |
 | K20 | 有**两套实现**（根 `index.html` 与 `web/`），同一功能改两边会漂移；只有太阳算法有数值等价性测试守着 | 一边的改动不会自动出现在另一边 | 功能演进只改 `web/`（有测试 + guard），根原型冻结；必须两边同改时先改 `web/` 再同步并跑 `npm run verify` |
 | K21 | 旧验收脚本（`snapsaga_queue_check/*.cjs`、`ss_e2e.cjs`）依赖页面全局（`PHOTOS`/`DB`/`GenQueue`/`cam`…），靠 `src/debug/bridge.ts` 只读兼容层才能跑 | 删掉 bridge 会让那批脚本失效（`web/e2e/` 已内化同样断言，不受影响） | 保留 bridge（零成本、便于线上排查）；新验收一律写在 `web/e2e/` |
-| K22 | e2e 里相机仍是 canvas 流 + `ImageCapture` stub；真机 `takePhoto` 的分辨率提升、iPhone 真实能力清单都不在 CI 覆盖内（延续已归档的 K12/K13/K14） | 真机行为仍可能与本机不一致（历史教训：v0.4 曾误判 iOS 不支持 takePhoto） | 出游实测时用 `tools/ios-probe.html` + 取景信息条（显示实际分辨率与本次是静止图像还是抓帧）复测 |
+| K22 | e2e 里相机仍是 canvas 流 + `ImageCapture` stub；真机 `takePhoto` 的分辨率提升、iPhone 真实能力清单都不在 CI 覆盖内（延续已归档的 K12/K13/K14）。**v0.10 起还多一层未知：iPhone「添加到主屏」后的独立模式（standalone）下 WebKit 的 `takePhoto` 行为是否与标签页一致，仍未实测**（用户于 iOS 26.6 Safari **标签页**实测可用、约 3.1 MB） | 真机行为仍可能与本机不一致（历史教训：v0.4 曾误判 iOS 不支持 takePhoto）；独立模式下画质是否降级只能到手机上才知道 | 不再靠「记得去测」：v0.10 把取图方式放到**取景页左下角**（真拍照/抓帧一眼可见）+ 相机抽屉的「相机诊断」区（ImageCapture 存在性 / 最近一次 takePhoto 结果与耗时 / 实际分辨率 / 连续失败计数）并加了**「重新检测」**按钮 —— 用户在独立模式里当场自证。出游实测时也可用 `tools/ios-probe.html` 复测 |
 | K23 | ~~PWA 安装后 start_url 落在 scope 内~~ **已修（2026-09-22）**：manifest 在 `/web/dist/` 下、`start_url="./"` 解析为 **`/web/dist/`**，而 dist 里只有 `app.html` 没有 `index.html` → **iOS 添加到主屏后点图标是 GitHub Pages 404**。修法：构建时同时生成 `dist/index.html`（引用相对 dist），并把 `./index.html` 加进 SW 预缓存 | 已装到主屏的图标**无需重新添加**即可恢复（打开的就是 `/web/dist/`，现在返回 200）；装出来的应用还落在 SW scope 内 → **离线可启动** | 已修。残留：`/web/` 入口页仍不在 SW scope 内（离线刷新 `/web/` 会失败，`/web/dist/` 正常） |
 | K24 | 主题模式的**真实出图效果**未在真机 + 真 Key 下验证：CI 只 stub 生图接口（返回 8×8 png），能证明「拼图 → 单图润色」的链路通、产出张数对，但「合成一张像不像海报」「统一风格是否真统一」取决于模型能力 | 效果好坏只能上线实测 | 出游实测一轮（真机 + 真 Key）；提示词词库就是要拿去收集调参数据的 |
 | K25 | 主题任务的队列快照会带上**多图入参 blob**（最多 9 张），与 K8 同源、放大更明显 | 未完成任务期间存储放大（最多 9×） | 与 K8 合并做：快照只存 `photoId`/`sourceIds`，恢复时回查 `photos` 仓 |
@@ -64,6 +64,11 @@
 
 ## 版本摘要
 详细验证记录与数据表在 [`iteration-history.md`](iteration-history.md)（每版一节）。
+
+### v0.10 · 相机取图方式可见 + 降级不再锁死（真拍照 / 抓帧一眼可见）— 2026-09-23
+- 做：修一个**真缺陷** —— 以前 `takePhoto` 失败一次就把 `still` 永久置 false，整个会话后面每张都静默变成抓帧，用户无从察觉画质掉了；现在**每张都先试 `takePhoto`**，单次失败只回落**本次**，**连续失败 3 次**（`STILL_FAIL_LIMIT`，可配置）才标记「仅抓帧」，并在降级那一刻用 **toast 明确告知一次**（指路「重新检测」），成功一次即把计数归零。可见性：取景页左下角小字加**取图方式标记**（`真拍照` 金 / `抓帧` 橙警示），相机抽屉新增**「相机诊断」区**（`#camDiag`：ImageCapture 存在性与可用性 / 最近一次 takePhoto 的结果与耗时 ms / 实际分辨率 `getSettings()` / 当前取图方式 / 连续失败 n/3）与**「重新检测」**按钮（重置降级状态并当场再试一次 takePhoto）。
+- 数字：快门点击同步返回 **0.1–1.1 ms**（不变）；真拍照落库 **320 ms**、抓帧回落 **331 ms**、降级后只抓帧 **23 ms**（不再白等 300 ms 的失败）；诊断区实测 `失败：setPhotoOptions failed · 16 ms` / `相机 640×480` / `3/3`；stub 修好后点「重新检测」→ `成功 · 12345 字节 · 301 ms` 且标记回到「真拍照」。
+- 验：**162 单测**（相机取图 16 → 29）· **231 e2e（6 组）** · **136 guard** 全绿（`npm run verify` 退出码 0）；新增 e2e 两组 [6][7]（单次失败仍可重试并恢复真拍照 / 连续 3 次才降级 + toast 一次 + 诊断区 + 重新检测）；guard 新增 24 项（源码侧 + 产物侧 + 产物运行时真 Chromium 读 `#camHudInfoShot` 与 `#camDiag`）；`git diff --stat main -- index.html` 无改动（根原型仍 v0.6）。**未验证：真机独立模式（添加到主屏）下 `takePhoto` 是否可用 —— 本次交付的是「让用户在真机上能自己看到并自证」的能力。**
 
 ### v0.9 · 取景页改版（干净相机界面 + 相机抽屉）— 2026-09-22
 - 做：取景页从「9 层常驻 UI 堆叠」改成**干净相机界面**——取景画面占满 dock 以上全部空间（`#view-cam` 不滚动、`#camWrap` 不再设最小高度），底栏固定一行最近拍摄 + 一行 `[相机][快门][翻转]`；**辅助 UI 全部收进相机抽屉 `#camSheet`**（场景相机 8 台 / 焦距档 / 胶片与风格 / 黄金时刻 / 曝光补偿·闪光·定时·水平仪 / `#camMeta` 诊断信息），点 dock 相机按钮或左下角小字打开、点遮罩 / 下拉手势 / 再点一次关闭；取景页隐藏 AppHeader，入口改由取景器右上角一排半透明小圆钮（▦网格 / ≡水平仪 / ✨队列 / ⚙设置）接管；取景器内只留轻量浮层（35mm 框 / AF 框 / 网格 / 水平仪 / 直方图 / 太阳弧 / 曝光刻度），构图提示改成单行 + 3.5 s 自动淡出 + 点一下再显示；主题条压缩成取景器顶部一行紧凑条。
