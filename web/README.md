@@ -12,6 +12,18 @@ v0.8 起 `web/` 以「**主题模式**」为中心（视觉与信息架构以主
   **快门路径依然不 await 任何 AI / 网络**。
 - **并发 9 / 多图 9 / 一个主题任务只占 1 个槽位**（槽位显示 `k/n` 分张进度）。
 
+v0.9 起**取景（拍照）页是干净相机界面**：
+
+- **取景画面占满**（`#camWrap` 不再设最小高度、`#view-cam` 不滚动），页面与视图都不需要滚动；
+- **固定底栏**：一行最近拍摄（最多 6 + ＋）+ 一行 `[📷相机][大快门][🔄翻转]`，快门在任何支持的高度下
+  都完整可见且不被任何元素覆盖；
+- **辅助 UI 全在相机抽屉 `#camSheet`**：场景相机 8 台 / 焦距档 13–50 / 胶片与风格 chips / 黄金时刻 /
+  曝光补偿·闪光·定时·水平仪 / `#camMeta` 诊断信息。点 dock 相机按钮或左下角小字打开，点遮罩 /
+  下拉手势 / 再点一次关闭；抽屉只盖取景画面（挂在 `#camWrap` 里），**快门行永远露在外面**；
+- 取景页隐藏 AppHeader，入口改由取景器右上角半透明小圆钮（▦网格 / ≡水平仪 / ✨队列 / ⚙设置）接管；
+  取景器内只留轻量浮层（35mm 框 / AF 框 / 网格 / 水平仪 / 直方图 / 太阳弧 / 曝光刻度），
+  构图提示是**单行 + 3.5 s 自动淡出 + 点一下再显示**。
+
 > 铁律仍然成立：**根 `index.html` 一行都不改**。两个入口同源、同库、同 localStorage 键，互相读得懂对方的数据。
 
 ## 线上地址
@@ -58,9 +70,10 @@ web/
 │   ├── store/                 # Zustand：useAppStore（含主题 slice）+ 相机运行时 + 队列单例
 │   ├── hooks/useObjectUrl.ts  # blob → objectURL，卸载即回收
 │   ├── components/            # 视图与面板（id/类名与原型对齐，旧验收脚本可直接跑）
+│   │   └── CameraSheet.tsx    # 取景页的相机抽屉（v0.9：辅助 UI 全在里面，只盖取景画面不挡快门）
 │   ├── debug/bridge.ts        # window.__snapsaga + 兼容旧脚本的全局名（只读）
 │   └── test/                  # Vitest（jsdom）单测
-├── e2e/                       # Playwright 验收脚本（跑 dist 产物）
+├── e2e/                       # Playwright 验收脚本（跑 dist 产物）；artifacts/ 是截图输出（不入库）
 ├── scripts/                   # guard.mjs（红线）/ publish-entry.mjs（生成 index.html）/ make-icons.mjs
 └── tools/                     # 零依赖：playwright 解析 + 静态服务器
 ```
@@ -73,7 +86,7 @@ npm run dev        # 本地开发（localhost 可绕过 HTTPS 限制测相机）
 npm run build      # tsc --noEmit && vite build && 生成 web/index.html（TS 严格模式零错误才通过）
 npm test           # Vitest + jsdom：队列调度 / 主题模型 / 提示词 / 拼图 / 场景插画 / 缩略图 / AI Base / 太阳算法 / 相机取图
 npm run guard      # 红线断言：源码侧 + 构建产物侧 + 产物运行时（真 Chromium 加载 dist）
-npm run e2e        # Playwright 五组验收（需要先 build）
+npm run e2e        # Playwright 六组验收（需要先 build）
 npm run verify     # build → test → guard → e2e 一条龙
 ```
 
@@ -121,8 +134,8 @@ npm run verify     # build → test → guard → e2e 一条龙
 | 层 | 工具 | 数量 | 说明 |
 |----|------|------|------|
 | 单测 | Vitest + jsdom | **149** 个测试（10 个文件） | 队列调度（并发峰值 9 / 主题任务占 1 槽位 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）9 · 主题模型（状态机 / 两条上限 9 / 产出条数）22 · 提示词拼装 14 · 拼图布局与合成 27 · 场景插画 18 · 缩略图 14 · 相机取图 16 · AI Base 11 · 太阳算法等价性 3 |
-| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **139** 项 | 主链路 36（并发 9）/ **主题模式 63** / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
-| 红线 guard | node + Playwright | **93** 项 | 源码侧 47 / 产物侧 22 / 产物运行时 12 / 子路径部署冒烟 7 |
+| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **204** 项 | 主链路 36（并发 9）/ **主题模式 63** / **取景页几何与相机抽屉 65（v0.9 新）** / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
+| 红线 guard | node + Playwright | **111** 项 | 源码侧 67 / 产物侧 25 / 产物运行时 12 / 子路径部署冒烟 7 |
 | 构建 | tsc（严格）+ vite | — | `npm run build` 零错误 |
 
 主题模式专项 e2e（`e2e/acceptance-theme-mode.e2e.mjs`，63 项）四个场景：
@@ -134,6 +147,21 @@ npm run verify     # build → test → guard → e2e 一条龙
 3. **选满 9 张后第 10 张被拒**：全选只选到 9 张 → 点第 10 张 → toast 提示「多图上限 9 张」且选图集合不变 →
    取消一张后可以继续选。
 4. **并发峰值 9 / 第 10 个任务排队**：10 连拍 → 9 在跑 + 1 排队 + 峰值 9；暗房 9 个显影槽全忙、统计与徽标一致。
+
+取景页几何专项 e2e（`e2e/acceptance-camera-layout.e2e.mjs`，65 项，**在 390×844 与 390×664 两个视口下各跑一遍**）：
+
+1. **几何**：快门 boundingBox 完整落在视口内且与任何其它可见元素不相交（逐个比较同页元素，排除祖先/后代，
+   用「被 overflow 裁剪后的可见矩形」比较）；取景画面高度 ≥ 视口 × 0.6 且被 `object-fit:cover` 的 video 填满；
+   `#view-cam` 与 `documentElement` 的 `scrollHeight == clientHeight`（不需要滚动）。
+2. **抽屉关闭时取景画面里没有常驻辅助块**：`#sunBar` / `.hs#skins` / `.fs#fr2` / `#genBar` / `#camMeta`
+   矩形均为 0（在 `display:none` 的抽屉里），`#camSheet` 是 `display:none`。
+3. **抽屉交互**：相机按钮 / 左下角小字打开，点遮罩、下拉手势（真鼠标拖拽把手）、再点一次都能关闭；
+   抽屉底边 ≤ 底栏顶边（结构上盖不到快门）；**抽屉开着时真的按一下快门**（照片入库、`#camMeta` 语义不变）；
+   抽屉里的控件真能用（切 50 mm → 预览缩放 + 左下角小字跟着变、切场景相机、胶片 chips 存在）。
+4. **轻量浮层**：构图提示是绝对定位浮层 + 单行（≤ 32 px）+ 4 s 内 opacity → 0 + 点取景画面恢复；
+   取景页 AppHeader 隐藏但 `header .sub` 版本号仍可读、六个 tab 不变。
+
+截图（人工确认「画面干净、快门明显、构图无遮挡」，产物不入库）：`e2e/artifacts/camera-<视口>-sheet-<closed|open>.png`。
 
 e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check/*.cjs` 与 `ss_e2e.cjs`），
 **断言逐条保留、未放松**。两处必要适配（都是"换了实现方式"，不是放宽）：
@@ -154,6 +182,9 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
   但真机 `takePhoto` 的分辨率提升只能靠 `../tools/ios-probe.html` 在手机上实测
   （这条由 iteration-log 的 **K22** 跟踪；K12/K13/K14 的真机结论见
   [iteration-history 的 K 条目存档](../docs/iteration-history.md#k-条目存档)）。
+- **取景页的几何只在 Chromium + 390×844 / 390×664 两个视口下量过**：真机 Safari 带工具栏时可视高度更矮，
+  且 `env(safe-area-inset-bottom)` 会让底栏变高、取景画面占比随之略降（仍 > 60%，因为取景画面是 `flex:1`）。
+- **构图提示是单行**，窄屏上较长的场景提示会被省略号截断（**K29**）：完整文案在相机抽屉的「场景相机」下方。
 - **AI 直连的 CORS 限制不变**（K3）：原型与新应用都是浏览器直连你配置的 Base，正式版走网关。
 - 未用真实 Key 打通 `api.klong.lat`（无凭证）。
 - 切后台页面被挂起的问题不变（K15）：队列只在页面活跃时推进。

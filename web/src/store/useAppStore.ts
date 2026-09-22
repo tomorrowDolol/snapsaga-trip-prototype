@@ -68,6 +68,8 @@ export interface AppState {
   queueCounts: QueueCounts;
   queueOpen: boolean;
   settingsOpen: boolean;
+  /** 取景页的相机抽屉（场景/焦距/胶片/黄金时刻/曝光等辅助 UI 都收在这里） */
+  camSheetOpen: boolean;
   lightboxId: string | null;
   /** 拍立得 */
   polaPhotoId: string | null;
@@ -164,6 +166,10 @@ export interface AppActions {
   // 设置
   openSettings(): void;
   closeSettings(): void;
+  /** 相机抽屉：点 dock 的相机按钮打开，点遮罩 / 下拉 / 再点一次关闭 */
+  openCamSheet(): void;
+  closeCamSheet(): void;
+  toggleCamSheet(): void;
   setAiInput(field: 'aiBaseInput' | 'aiKeyInput' | 'aiModelInput', v: string): void;
   setLatLon(lat: string, lon: string): void;
   saveAi(): void;
@@ -264,6 +270,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     queueCounts: { run: 0, queued: 0, failed: 0, done: 0 },
     queueOpen: false,
     settingsOpen: false,
+    camSheetOpen: false,
     lightboxId: null,
     polaPhotoId: null,
     polaFilm: '600',
@@ -329,7 +336,8 @@ export const useAppStore = create<AppStore>()((set, get) => {
     },
 
     setView(v) {
-      set({ view: v });
+      // 离开取景页时顺手收起相机抽屉：抽屉是取景页的附属物，不该跨页残留
+      set(v === 'cam' ? { view: v } : { view: v, camSheetOpen: false });
     },
 
     // ---------------- 相机 ----------------
@@ -570,6 +578,15 @@ export const useAppStore = create<AppStore>()((set, get) => {
     },
 
     // ---------------- 设置 ----------------
+    openCamSheet() {
+      set({ camSheetOpen: true });
+    },
+    closeCamSheet() {
+      set({ camSheetOpen: false });
+    },
+    toggleCamSheet() {
+      set({ camSheetOpen: !get().camSheetOpen });
+    },
     openSettings() {
       const geo = get().geo;
       set({

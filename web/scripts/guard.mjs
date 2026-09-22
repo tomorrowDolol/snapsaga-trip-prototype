@@ -65,6 +65,11 @@ const queueRuntimeSrc = srcText('store/queueRuntime.ts');
 const themeViewSrc = srcText('components/ThemeView.tsx');
 const themeCreateSrc = srcText('components/ThemeCreateSheet.tsx');
 const darkroomSrc = srcText('components/DarkroomView.tsx');
+const cameraViewSrc = srcText('components/CameraView.tsx');
+const cameraSheetSrc = srcText('components/CameraSheet.tsx');
+const appHeaderSrc = srcText('components/AppHeader.tsx');
+const stylesSrc = srcText('styles.css');
+const bridgeSrc = srcText('debug/bridge.ts');
 
 // 快门路径：capture() 只允许 await「本地取图」与「本机入库」两件事
 const captureBodyRaw = sliceFn(storeSrc, 'async capture() {', '// ---------------- 场景 / 水平仪');
@@ -98,6 +103,41 @@ check('只对设备真正支持的能力下约束（planConstraints 先读 caps�
 check('camTune 逐项 try（单项不支持不拖累其它项）', /for \(const c of planConstraints\(caps\)\)[\s\S]{0,200}catch/.test(captureSrc));
 check('启动时主动申请持久存储（navigator.storage.persist）', /navigator\.storage\.persist\(\)/.test(captureSrc));
 check('降级不静默：信息条如实区分静止图像 / 抓帧', /本次：静止图像/.test(captureSrc) && /本次：抓帧/.test(captureSrc) && /仅能抓帧/.test(captureSrc));
+
+/* ---------- 取景页「干净相机界面」红线（v0.9） ----------
+   取景画面必须占满、快门必须永远在屏内且不被遮挡；辅助 UI 只能在抽屉里。
+   这组断言是几何不变量的**源码侧**部分，几何本身由 e2e/acceptance-camera-layout 在两个视口下量。 */
+const SHEET_BLOCKS = ['id="skins"', 'id="fr2"', 'id="genBar"', 'id="sunBar"', 'id="camMeta"'];
+check(
+  '辅助 UI 全部收在 CameraSheet 抽屉里（场景相机/焦距/胶片与风格/黄金时刻/诊断信息）',
+  SHEET_BLOCKS.every((s) => cameraSheetSrc.includes(s)),
+  SHEET_BLOCKS.filter((s) => !cameraSheetSrc.includes(s)).join(' / ') || '5/5',
+);
+check(
+  '这些辅助块没留在取景画面里（CameraView 不再渲染它们）',
+  SHEET_BLOCKS.every((s) => !cameraViewSrc.includes(s)),
+  SHEET_BLOCKS.filter((s) => cameraViewSrc.includes(s)).join(' / ') || '(无)',
+);
+check(
+  '抽屉挂在取景画面里（在 #camWrap 之后、底栏 #camDock 之前 → 永远盖不到快门）',
+  cameraViewSrc.indexOf('id="camWrap"') < cameraViewSrc.indexOf('<CameraSheet') &&
+    cameraViewSrc.indexOf('<CameraSheet') < cameraViewSrc.indexOf('id="camDock"'),
+);
+check('#shutter 在固定底栏 dock 里（id 与行为不变）', cameraViewSrc.indexOf('id="camDock"') < cameraViewSrc.indexOf('id="shutter"'));
+check('#shutter 在源码里只有一个定义（不会出现重复 id 抢点击）', (cameraViewSrc.match(/id="shutter"/g) || []).length === 1);
+check('dock 里有打开抽屉的「相机」按钮', /id="btnCamSheet"/.test(cameraViewSrc));
+check('取景页不滚动（#view-cam overflow:hidden）', /#view-cam\{overflow:hidden\}/.test(stylesSrc));
+check('取景画面不设最小高度（短屏也不把底栏挤出屏幕）', /#camWrap\{[^}]*min-height:0/.test(stylesSrc));
+check('取景页隐藏 AppHeader', /header\.app\.cam-hidden\{display:none\}/.test(stylesSrc) && /cam-hidden/.test(appHeaderSrc));
+check('取景器右上角小圆钮提供队列 / 设置入口（入口不能丢）', /id="btnQueue"/.test(cameraViewSrc) && /id="btnSettings"/.test(cameraViewSrc));
+check('队列 / 设置入口在取景页只有一份实例（AppHeader 在取景页不渲染它们）', /inCam \? null/.test(appHeaderSrc) && /cam-hidden/.test(appHeaderSrc));
+check(
+  '构图提示是单行 + 3–4 秒自动淡出（不再是常驻大卡）',
+  /white-space:nowrap/.test(stylesSrc) && /setTimeout\(\(\) => setHintOn\(false\), 3\d{3}\)/.test(cameraViewSrc),
+);
+check('相机抽屉是取景画面内的绝对定位层（不会盖住底栏）', /#camSheet\{[^}]*position:absolute/.test(stylesSrc));
+check('抽屉支持下拉关闭（把手上有指针手势）', /onPointerDown/.test(cameraSheetSrc) && /setPointerCapture/.test(cameraSheetSrc));
+check('调试桥暴露相机抽屉开关（e2e 需要先开抽屉再点里面的元素）', /openCameraSheet/.test(bridgeSrc) && /closeCameraSheet/.test(bridgeSrc));
 
 // 缩略图规格
 check('缩略图最长边 = 320', /THUMB_MAX = 320/.test(thumbsSrc));
@@ -185,6 +225,9 @@ if (!existsSync(join(DIST, 'app.html'))) {
   check('产物里有主题任务的阶段文案（拼合中 / 统一风格中）', /拼合中/.test(bundle) && /统一风格中/.test(bundle));
   check('产物里有拼图降级路径与上限文案（可读错误 + 第 10 张提示）', /没有可合成的照片/.test(bundle) && /多图上限/.test(bundle));
   check('产物里有场景插画（内联 SVG 插画模块被打进包）', /ss-art-/.test(bundle));
+  check('产物里有相机抽屉（#camSheet / #btnCamSheet / 上滑动画）', /camSheet/.test(bundle) && /camSheetUp/.test(distAll) && /btnCamSheet/.test(bundle));
+  check('产物里取景页隐藏 AppHeader 的规则在（cam-hidden）', /cam-hidden/.test(distAll));
+  check('产物里取景页不滚动的规则在（#view-cam overflow:hidden）', /#view-cam\{overflow:hidden\}/.test(distAll));
   check('产物里没有付费 / Pro 横幅文案', !/升级 ?Pro|Pro ?版|订阅会员|付费解锁/.test(bundle));
   check('PWA 文件已随构建产出（manifest + sw.js + 图标）', existsSync(join(DIST, 'manifest.webmanifest')) && existsSync(join(DIST, 'sw.js')) && existsSync(join(DIST, 'icon-512.png')));
   // sw.js 的预缓存清单必须都是真实存在的文件：addAll 是原子的，一个 404 就会让整个预缓存失效

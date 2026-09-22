@@ -3,5 +3,7 @@ dist
 .vite
 *.local
 .DS_Store
+# e2e 截图产物（人工确认用，每次跑 e2e 重新生成；不提交、也不进线上站点）
+e2e/artifacts/
 # dist/ 不再提交：Pages 已切到 GitHub Actions 发布，产物由 .github/workflows/deploy-pages.yml
 # 在 CI 里构建（npm run build）并由 scripts/assemble-site.mjs 组装后上传。见 README 部署一节。

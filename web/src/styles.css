@@ -43,6 +43,9 @@ header.app{
   background:linear-gradient(to bottom,#101416,rgba(10,12,13,.6)); color:#fff; flex:0 0 auto;
   border-bottom:1px solid var(--ln);
 }
+/* 取景页：AppHeader 整个隐藏（构图空间优先），入口由取景器右上角小圆钮接管；
+   元素仍在 DOM 里（版本号等信息照旧可读），只是不占高度。 */
+header.app.cam-hidden{display:none}
 header.app .logo{font-weight:800; letter-spacing:1px; font-size:16px}
 header.app .logo em{font-style:normal; color:var(--gold)}
 header.app .sub{font-size:10px; opacity:.6; letter-spacing:2px; font-family:var(--mo)}
@@ -68,8 +71,12 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 .view::-webkit-scrollbar{display:none}
 .view.on{display:flex}
 
-/* ============ 取景 ============ */
-#camWrap{position:relative; flex:1; min-height:300px; background:#0b0f10; overflow:hidden}
+/* ============ 取景（干净相机界面） ============
+   结构：底栏 dock（最近拍摄 + 相机/快门/翻转，固定不滚动）+ 取景画面（flex:1，占满 dock 以上）。
+   取景画面里只留轻量浮层（35mm 框 / AF 框 / 网格 / 水平仪 / 直方图 / 太阳弧 / 曝光刻度 / 单行构图提示）；
+   场景相机 / 焦距 / 胶片与风格 / 黄金时刻 / 曝光补偿 / 诊断信息全在 #camSheet 抽屉里（默认收起）。 */
+#view-cam{overflow:hidden}                 /* 取景页不滚动：快门永远在屏内 */
+#camWrap{position:relative; flex:1 1 auto; min-height:0; background:#0b0f10; overflow:hidden}
 #video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; transition:transform .25s}
 #camPlaceholder{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:30px}
 #camPlaceholder .ph-art{position:absolute; inset:0; opacity:.42}
@@ -77,40 +84,69 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 #camPlaceholder .ph-body{position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; gap:12px}
 #camPlaceholder .big{font-size:44px}
 #camPlaceholder p{font-size:13px; max-width:280px; color:#cfe0e0}
-#camMeta{
-  position:absolute; left:10px; bottom:10px; z-index:6; display:none;
-  background:rgba(6,8,9,.72); color:#e8f1f1; font-size:11px; line-height:1.5;
-  padding:5px 9px; border-radius:8px; backdrop-filter:blur(3px); pointer-events:none;
-}
+#camMeta{margin:12px 16px 0; font-size:11px; color:var(--dim); font-family:var(--mo); line-height:1.5}
 #camMeta b{color:var(--gold); font-weight:700}
 #startCam{background:var(--gold); color:#20170a; font-weight:800; font-size:15px; padding:12px 30px; border-radius:999px}
 #gridLayer{position:absolute; inset:0; pointer-events:none; z-index:5; display:none}
 #gridLayer svg{width:100%; height:100%}
-/* 35mm 取景框 */
-.fr{position:absolute; left:26px; right:26px; top:64px; bottom:96px; border:2px solid rgba(255,255,255,.85); border-radius:10px; pointer-events:none; z-index:4}
+/* 35mm 取景框：居中 3:4，随取景画面高度缩放，永远不出画 */
+.fr{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); height:70%; aspect-ratio:3/4; border:2px solid rgba(255,255,255,.8); border-radius:10px; pointer-events:none; z-index:4}
 .fr i{position:absolute; width:15px; height:15px; border:2px solid #fff}
-/* 顶部信息条 / 直方图 / 太阳轨迹 / 曝光刻度 / 提示卡 / 水平仪 */
-.vtop{position:absolute; left:12px; right:12px; top:11px; display:flex; justify-content:space-between; gap:8px; z-index:6; pointer-events:none}
-.vb{background:rgba(10,14,15,.6); backdrop-filter:blur(6px); border-radius:999px; padding:3px 9px; font-size:10px; font-family:var(--mo); white-space:nowrap}
+/* AF 框（轻量浮层） */
+.af{position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); width:72px; height:72px; z-index:4; pointer-events:none}
+.af i{position:absolute; inset:0; border:1px solid rgba(255,255,255,.42); border-radius:6px}
+/* 场景信息（左上角一行小字） */
+.vtop{position:absolute; left:12px; right:12px; top:10px; display:flex; justify-content:space-between; gap:8px; z-index:6; pointer-events:none}
+.vb{background:rgba(10,14,15,.55); backdrop-filter:blur(6px); border-radius:999px; padding:3px 9px; font-size:10px; font-family:var(--mo); white-space:nowrap}
 .vb.gold{color:var(--gold)}
-.hist{position:absolute; left:12px; bottom:96px; width:58px; height:22px; display:flex; align-items:flex-end; gap:1.5px; opacity:.8; z-index:5; pointer-events:none}
+/* 取景器右上角半透明小圆钮（AppHeader 在取景页隐藏，队列/设置入口在这里） */
+#camHudTop{position:absolute; top:10px; right:10px; z-index:9; display:flex; gap:8px}
+#camHudTop .hbtn{
+  position:relative; width:38px; height:38px; border-radius:50%; display:grid; place-items:center;
+  font-size:15px; line-height:1; color:#fff; background:rgba(10,14,15,.5);
+  backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.14);
+}
+#camHudTop .hbtn.on{background:var(--gold); color:#1a1206; border-color:var(--gold)}
+#camHudTop .badge{
+  display:none; position:absolute; top:0; right:0; min-width:16px; height:16px; padding:0 4px;
+  border-radius:999px; background:var(--gold); color:#1a1206; font-size:10px; font-weight:800;
+  line-height:16px; text-align:center; font-family:var(--mo);
+}
+#camHudTop .badge.show{display:block}
+#camHudTop .badge.hot{background:var(--vi); color:#fff; animation:pulse 1.2s infinite}
+/* 左下角一行小字：ISO + 焦距（点开抽屉） */
+#camHudInfo{
+  position:absolute; left:12px; bottom:10px; z-index:8; display:flex; align-items:center; gap:5px;
+  padding:4px 10px; border-radius:999px; background:rgba(10,14,15,.5); backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.12); color:#DDE6E6; font-size:10px;
+}
+#camHudInfo em{font-style:normal; color:var(--gold); font-size:9px}
+/* 底部读数行：直方图（左）/ 曝光刻度（中）/ 太阳弧（右） */
+.hist{position:absolute; left:12px; bottom:38px; width:58px; height:22px; display:flex; align-items:flex-end; gap:1.5px; opacity:.8; z-index:5; pointer-events:none}
 .hist i{flex:1; background:rgba(255,255,255,.6)}
-.sarc{position:absolute; right:12px; bottom:96px; width:90px; height:46px; z-index:5; pointer-events:none}
-.evr{position:absolute; left:0; right:0; bottom:62px; display:flex; justify-content:center; align-items:center; gap:10px; font-family:var(--mo); font-size:10px; color:rgba(255,255,255,.72); z-index:5; pointer-events:none}
+.sarc{position:absolute; right:12px; bottom:38px; width:90px; height:46px; z-index:5; pointer-events:none}
+.evr{position:absolute; left:0; right:0; bottom:36px; display:flex; justify-content:center; align-items:center; gap:10px; font-family:var(--mo); font-size:10px; color:rgba(255,255,255,.72); z-index:5; pointer-events:none}
 .evr b{width:16px; height:2px; background:rgba(255,255,255,.32); display:block}
 .evr em{font-style:normal; color:var(--gold); font-weight:700}
-.tp{position:absolute; left:16px; right:16px; bottom:84px; background:rgba(10,14,15,.74); backdrop-filter:blur(10px); border:1px solid var(--ln); border-radius:11px; padding:9px 11px; font-size:11.5px; color:#DDE6E6; line-height:1.45; z-index:6}
+/* 构图提示：单行、3.5 s 后自动淡出、点取景画面可再显示（不再常驻大卡） */
+.tp{
+  position:absolute; left:10px; right:10px; bottom:96px; z-index:6; pointer-events:none;
+  background:rgba(10,14,15,.7); backdrop-filter:blur(10px); border:1px solid var(--ln); border-radius:999px;
+  padding:7px 12px; font-size:11px; color:#DDE6E6; line-height:1.3;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity .6s ease;
+}
 .tp b{color:var(--gold)}
-.hd{position:absolute; left:0; right:0; bottom:14px; display:flex; justify-content:center; gap:8px; z-index:7}
-.hd .c{background:rgba(10,14,15,.6); backdrop-filter:blur(6px); border-radius:999px; padding:6px 12px; font-size:12px; font-family:var(--mo); border:0; color:var(--fg)}
-.hd .c.r{width:38px; height:38px; padding:0; border-radius:50%}
-.hd .c.on{background:var(--gold); color:#1a1206}
+/* 抽屉里的曝光行（原来那一排浮在取景画面上的按钮） */
+.hd{position:static; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:4px 16px 10px}
+.hd .c{background:rgba(255,255,255,.05); border-radius:999px; padding:7px 13px; font-size:12px; font-family:var(--mo); border:1px solid var(--ln); color:var(--fg)}
+.hd .c.on{background:var(--gold); color:#1a1206; border-color:var(--gold)}
+#camSheet #vtr{flex:1 1 100%; background:none; padding:0; color:var(--dim); font-size:11px}
 .lv{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:230px; height:230px; transition:opacity .3s; pointer-events:none; z-index:6}
 .lv .r2{position:absolute; inset:0; border:1px solid rgba(111,211,199,.5); border-radius:50%}
 .lv .b2{position:absolute; left:0; right:0; top:50%; height:2px; background:var(--teal)}
 .lv .tx{position:absolute; left:50%; bottom:-4px; transform:translateX(-50%); font-size:11px; color:var(--teal); font-family:var(--mo)}
 #levelHud{
-  position:absolute; top:calc(env(safe-area-inset-top) + 8px); left:50%; transform:translateX(-50%);
+  position:absolute; left:50%; bottom:62px; transform:translateX(-50%);
   z-index:8; display:none; align-items:center; gap:8px;
   background:rgba(16,28,29,.55); backdrop-filter:blur(6px); border-radius:999px; padding:6px 14px;
   color:#fff; font-size:12px; font-weight:600;
@@ -118,29 +154,53 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 #levelDot{width:10px; height:10px; border-radius:50%; background:var(--red); transition:background .2s}
 #levelDot.ok{background:var(--teal)}
 #sunBar{
-  position:absolute; left:12px; right:12px; bottom:12px; z-index:8;
-  background:rgba(16,28,29,.55); backdrop-filter:blur(8px); border-radius:14px;
-  padding:10px 14px; color:#fff; display:flex; align-items:center; gap:10px; font-size:12px;
+  display:flex; align-items:center; gap:10px; margin:12px 16px 0;
+  background:rgba(16,28,29,.55); border:1px solid var(--ln); border-radius:14px;
+  padding:10px 14px; color:#fff; font-size:12px;
 }
 #sunBar .ico{font-size:20px}
 #sunBar .t1{font-weight:800; font-size:12.5px}
 #sunBar .t2{opacity:.8; font-size:11px}
 #flash{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:50; transition:opacity .12s}
 
-/* 主题生效中的顶部主题条（边拍边收） */
+/* 主题生效中的主题条：取景器顶部**一行紧凑条**（名称 + 已收张数 + 结束） */
 .thbar{
-  margin:10px 16px 0; border-radius:14px; border:1px solid rgba(233,180,76,.42);
-  background:linear-gradient(100deg,rgba(233,180,76,.16),rgba(20,24,26,.82));
-  padding:11px 13px; display:flex; align-items:center; gap:11px; flex:0 0 auto;
+  position:absolute; left:10px; right:10px; top:56px; z-index:12;
+  border-radius:999px; border:1px solid rgba(233,180,76,.42);
+  background:linear-gradient(100deg,rgba(233,180,76,.2),rgba(20,24,26,.86));
+  backdrop-filter:blur(8px);
+  padding:6px 10px 6px 12px; display:flex; align-items:center; gap:8px; font-size:12px;
 }
-.thbar .ic{width:34px; height:34px; border-radius:10px; background:rgba(233,180,76,.2); display:grid; place-items:center; font-size:17px}
-.thbar .t1{font-size:13.5px; font-weight:800}
-.thbar .t2{font-size:11px; color:var(--gold); font-family:var(--mo); margin-top:2px}
-.pulse{width:7px; height:7px; border-radius:50%; background:var(--red); animation:pl 1.2s infinite; display:inline-block}
+.thbar .ic{font-size:13px}
+.thbar .t1{flex:1 1 auto; min-width:0; font-weight:800; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.thbar .t2{flex:0 0 auto; font-size:10.5px; color:var(--gold); font-family:var(--mo)}
+.pulse{width:7px; height:7px; border-radius:50%; background:var(--red); animation:pl 1.2s infinite; display:inline-block; flex:0 0 auto}
 @keyframes pl{0%,100%{opacity:1}50%{opacity:.25}}
 
+/* 相机抽屉（辅助 UI 都收在这里）：只盖住取景画面，快门行始终露在外面 */
+#camSheetMask{position:absolute; inset:0; z-index:29; display:none; background:rgba(0,0,0,.5); backdrop-filter:blur(2px)}
+#camSheetMask.show{display:block}
+#camSheet{
+  position:absolute; left:0; right:0; bottom:0; z-index:30; display:none;
+  max-height:86%; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none;
+  background:linear-gradient(180deg,rgba(20,25,27,.98),var(--bg2));
+  border-top:1px solid var(--ln2); border-radius:20px 20px 0 0;
+  padding:0 0 14px; transform:translateY(100%); transition:transform .26s ease;
+}
+#camSheet::-webkit-scrollbar{display:none}
+#camSheet.show{display:block; transform:none; animation:camSheetUp .26s ease}
+@keyframes camSheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.camsheet-head{padding:0 0 2px; touch-action:none; cursor:grab}
+.camsheet-head .grab{width:44px; height:5px; border-radius:99px; background:rgba(255,255,255,.22); margin:8px auto 8px}
+.camsheet-title{display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:0 16px; font-size:13px; font-weight:800}
+.camsheet-title span{font-size:10.5px; color:var(--dim2); font-weight:600; letter-spacing:.5px}
+.camsheet-body{padding-top:2px}
+#camSheet .scene-head{margin:10px 16px 0}
+#camSheet .scene-hint-full{margin:6px 16px 0; font-size:11.5px; color:var(--dim); line-height:1.5}
+#camSheet .scene-hint-full b{color:var(--gold)}
+
 /* 焦距档 */
-.fs{display:flex; justify-content:center; gap:14px; padding:10px 0 4px; background:var(--bg); flex:0 0 auto}
+.fs{display:flex; justify-content:space-between; gap:14px; padding:6px 16px 8px; background:none; flex:0 0 auto}
 .fb{width:52px; height:52px; border-radius:50%; border:1.5px solid var(--ln2); background:rgba(255,255,255,.03); color:var(--fg); font-family:var(--mo); font-size:14px; font-weight:700; display:grid; place-items:center; line-height:1}
 .fb small{font-size:9px; color:var(--dim2)}
 .fb.on{background:#fff; color:#111; border-color:#fff}
@@ -161,7 +221,7 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 .sk .nm span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* 拍完自动生图 */
-#genBar{flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg2); border-top:1px solid var(--ln)}
+#genBar{flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:10px 16px; background:none; border-top:1px solid var(--ln)}
 #genToggle{flex:0 0 auto; font-size:12px; font-weight:800; padding:7px 12px; border-radius:999px; background:rgba(255,255,255,.05); border:1px solid var(--ln); color:var(--dim); white-space:nowrap}
 #genToggle.on{background:rgba(111,211,199,.18); color:var(--teal); border-color:rgba(111,211,199,.5)}
 #genStyles{flex:1 1 auto; display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; min-width:0}
@@ -170,8 +230,9 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 .gen-chip{flex:0 0 auto; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.05); border:1px solid var(--ln); color:var(--dim); white-space:nowrap}
 .gen-chip.on{background:#fff; color:#111; border-color:#fff}
 
-/* 底部胶片条 */
-.dstrip{display:flex; gap:6px; padding:8px 16px 4px; overflow-x:auto; scrollbar-width:none; flex:0 0 auto; background:var(--bg2); border-top:1px solid var(--ln)}
+/* 固定底栏 dock：一行最近拍摄 + 一行 [相机][快门][翻转] */
+#camDock{flex:0 0 auto; background:var(--bg2); border-top:1px solid var(--ln)}
+.dstrip{display:flex; gap:6px; padding:8px 16px 4px; overflow-x:auto; scrollbar-width:none; flex:0 0 auto; background:var(--bg2)}
 .dstrip::-webkit-scrollbar{display:none}
 .df{width:44px; height:44px; border-radius:9px; overflow:hidden; position:relative; border:1px solid var(--ln2); flex:0 0 auto; background:#0b0f10}
 .df img{width:100%; height:100%; object-fit:cover}
@@ -181,7 +242,7 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 
 /* 快门行 */
 #shutterRow{flex:0 0 auto; display:flex; align-items:center; justify-content:space-around; padding:8px 24px calc(env(safe-area-inset-bottom) + 14px); background:var(--bg2)}
-.side-btn{width:52px; text-align:center; font-size:10.5px; color:var(--dim)}
+.side-btn{width:60px; text-align:center; font-size:10.5px; color:var(--dim)}
 .side-btn .ic{font-size:22px; display:block; margin-bottom:2px}
 #shutter{width:68px; height:68px; border-radius:50%; border:4px solid rgba(255,255,255,.35); background:#fff; box-shadow:0 0 0 3px rgba(0,0,0,.5); position:relative}
 #shutter:active{transform:scale(.92)}

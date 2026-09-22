@@ -38,6 +38,10 @@ export interface SnapsagaDebug {
   aiRedrawCore: typeof aiRedrawCore;
   capture(): Promise<void>;
   openSettings(): void;
+  /** 相机抽屉（取景页的辅助 UI 都在里面）：给 e2e / guard 用，让脚本先打开抽屉再点里面的元素 */
+  openCameraSheet(): void;
+  closeCameraSheet(): void;
+  cameraSheetOpen(): boolean;
   // ---- 主题模式（供 guard / e2e 驱动）----
   limits: { queueMax: number; maxSources: number };
   addThemeTask(input: ThemeTaskInput): string;
@@ -89,6 +93,9 @@ export function installDebugBridge(): void {
     aiRedrawCore,
     capture: () => store.getState().capture(),
     openSettings: () => store.getState().openSettings(),
+    openCameraSheet: () => store.getState().openCamSheet(),
+    closeCameraSheet: () => store.getState().closeCamSheet(),
+    cameraSheetOpen: () => store.getState().camSheetOpen,
     limits: { queueMax: QUEUE_MAX, maxSources: THEME_MAX_SOURCES },
     addThemeTask: (input) => queue.addTheme(input),
     openThemeCreate: (withPick) => store.getState().openThemeCreate(withPick),
