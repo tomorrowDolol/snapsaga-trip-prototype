@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="能力探测">
+<title>SnapSaga 能力探测 · iOS / 安卓实测</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22SnapSaga%20能力探测%22%2C%22short_name%22%3A%22探测%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D%2527http%253A%2F%2Fwww.w3.org%2F2000%2Fsvg%2527%2520viewBox%253D%25270%25200%252032%252032%2527%253E%253Crect%2520width%253D%252732%2527%2520height%253D%252732%2527%2520rx%253D%25277%2527%2520fill%253D%2527%2523ff8a3d%2527%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%2232x32%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+<style>
+:root{--bg:#0e1617;--card:#16262a;--fg:#e8f1f1;--soft:#9fb3b4;--ok:#4ed18a;--bad:#ff7a7a;--warn:#ffb27a;--accent:#ff8a3d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;padding:18px 16px 60px}
+h1{font-size:19px;margin:0 0 4px}
+.sub{color:var(--soft);font-size:12.5px;margin-bottom:16px}
+.card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--accent)}
+.row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px}
+.row:last-child{border-bottom:none}
+.k{color:var(--soft);flex:0 0 46%}
+.v{text-align:right;word-break:break-word;flex:1}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+button{background:var(--accent);color:#fff;border:0;border-radius:999px;padding:11px 22px;font-size:15px;font-weight:700;width:100%;margin-bottom:10px}
+button.ghost{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.22);font-weight:500}
+pre{white-space:pre-wrap;word-break:break-all;background:#0b1113;border-radius:9px;padding:11px;font-size:12px;color:var(--soft);margin:0}
+video{width:100%;border-radius:10px;background:#000;display:none;margin-top:8px}
+.note{font-size:12px;color:var(--soft);margin-top:8px}
+</style>
+</head>
+<body>
+<h1>SnapSaga 能力探测</h1>
+<div class="sub">在目标手机上用浏览器打开 → 逐项跑完 → 把底部报告贴回给我。<br>结论直接决定：「网页/PWA 方案够不够」还是「必须上原生（Flutter）」。</div>
+
+<div class="card">
+  <h2>① 运行形态</h2>
+  <div id="mode"></div>
+</div>
+
+<div class="card">
+  <h2>② 相机（SnapSaga 的命门）</h2>
+  <button id="cam">打开后置相机并取图</button>
+  <button id="camF" class="ghost">打开前置相机并取图</button>
+  <video id="v" playsinline muted autoplay></video>
+  <div id="camOut"></div>
+  <div class="note">重点看两项：拿到的分辨率，以及「静止图像管线」是否可用。没有它就是抓帧，画质上限被预览分辨率锁死。</div>
+</div>
+
+<div class="card">
+  <h2>③ 本地存储（离线照片库）</h2>
+  <div id="store"></div>
+  <div class="note">IndexedDB 写不进去 = 离线相册方案不成立；persist 不支持 = 系统可能在空间紧张时清掉照片。</div>
+</div>
+
+<div class="card">
+  <h2>④ 切后台后还能不能干活（生图队列的前提）</h2>
+  <div id="bg"></div>
+  <button id="bgTest" class="ghost">开始 20 秒计时 → 然后切到别的 App 再回来</button>
+  <div class="note">回来后会显示「切后台期间计时器停了多久」。停得明显 = 切后台队列就暂停，「4 并发后台生图」只在页面活跃时成立。</div>
+</div>
+
+<div class="card">
+  <h2>⑤ 其它能力</h2>
+  <div id="misc"></div>
+</div>
+
+<div class="card">
+  <h2>报告（可复制）</h2>
+  <pre id="report">点上面的按钮开始…</pre>
+  <button id="copy" class="ghost">复制报告</button>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const rows = (el, list) => { el.innerHTML = list.map(([k, v, cls]) => `<div class="row"><span class="k">${k}</span><span class="v ${cls || ''}">${v}</span></div>`).join(''); };
+const y = (b) => (b ? ['支持', 'ok'] : ['不支持', 'bad']);
+const REPORT = {};
+const setR = (k, v) => { REPORT[k] = v; $('#report').textContent = JSON.stringify(REPORT, null, 1); };
+
+// ① 运行形态
+(function mode() {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua);
+  const iosVer = (ua.match(/OS (\d+[_.]\d+)/) || [])[1] || '';
+  rows($('#mode'), [
+    ['系统', (ios ? 'iOS/iPadOS ' + iosVer.replace('_', '.') : (/Android/.test(ua) ? 'Android' : '其它')) + (standalone ? ' · 已加到主屏(standalone)' : ' · 浏览器标签页')],
+    ['浏览器', (ua.match(/(CriOS|FxiOS|EdgiOS|Version)\/[\d.]+/) || ['WebKit'])[0]],
+    ['运行模式', standalone ? 'standalone（可当 App 用）' : 'browser（普通网页）', standalone ? 'ok' : 'warn'],
+    ['安全上下文 HTTPS', window.isSecureContext ? '是' : '否，相机等能力会被禁用', window.isSecureContext ? 'ok' : 'bad'],
+    ['Service Worker', ...y('serviceWorker' in navigator)],
+    ['可安装(PWA)', ...y('BeforeInstallPromptEvent' in window || standalone)],
+  ]);
+  setR('系统', (ios ? 'iOS ' + iosVer.replace('_', '.') : (/Android/.test(ua) ? 'Android' : '其它')) + (standalone ? ' / standalone' : ' / browser'));
+  setR('HTTPS', window.isSecureContext);
+})();
+
+// ② 相机
+async function shoot(facing) {
+  const out = $('#camOut');
+  out.innerHTML = '<div class="row"><span class="k">状态</span><span class="v">正在打开…</span></div>';
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 2560 }, height: { ideal: 1440 } }, audio: false });
+  } catch (e) {
+    rows(out, [['打开相机', '失败：' + (e.name || e.message), 'bad'], ['提示', e.name === 'NotAllowedError' ? '权限被拒（需 HTTPS + 用户手势）' : '该环境可能不支持 getUserMedia']]);
+    setR('相机(' + facing + ')', '打开失败 ' + e.name); return;
+  }
+  const v = $('#v'); v.srcObject = stream; v.style.display = 'block';
+  await new Promise(r => setTimeout(r, 1200));   // 等对焦/曝光稳定
+  const t = stream.getVideoTracks()[0];
+  const s = (t && t.getSettings && t.getSettings()) || {};
+  const hasIC = 'ImageCapture' in window;
+  let icResult = '未使用';
+  let icBytes = 0;
+  if (hasIC) {
+    try {
+      const blob = await new ImageCapture(t).takePhoto();
+      icBytes = blob.size; icResult = '成功';
+    } catch (e) { icResult = '抛错：' + (e.name || e.message); }
+  }
+  // 抓帧基线（对比二者画质来源）
+  const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0);
+  const frameBytes = await new Promise(r => c.toBlob(b => r(b ? b.size : 0), 'image/jpeg', 0.92));
+  rows(out, [
+    ['相机打开', '成功', 'ok'],
+    ['预览分辨率', `${v.videoWidth}×${v.videoHeight}`, 'ok'],
+    ['track 实际设置', `${s.width || '?'}×${s.height || '?'}`],
+    ['静止图像管线', hasIC ? ('存在 · takePhoto ' + icResult) : '不存在（只能抓帧）', hasIC && icResult === '成功' ? 'ok' : 'bad'],
+    ['真拍照字节数', icBytes ? icBytes + ' B' : '—', icBytes ? 'ok' : 'warn'],
+    ['抓帧字节数', frameBytes + ' B'],
+    ['对焦/手电约束', t.getCapabilities ? (['focusMode', 'torch', 'zoom'].filter(k => t.getCapabilities()[k]).join(' / ') || '无可控项') : '不支持 getCapabilities', 'warn'],
+  ]);
+  setR('相机(' + facing + ')', { 预览: `${v.videoWidth}×${v.videoHeight}`, ImageCapture存在: hasIC, takePhoto: icResult, takePhoto字节: icBytes, 抓帧字节: frameBytes, 可控项: t.getCapabilities ? Object.keys(t.getCapabilities()).join(',') : '无' });
+  stream.getTracks().forEach(x => x.stop()); v.style.display = 'none';
+}
+$('#cam').onclick = () => shoot('environment');
+$('#camF').onclick = () => shoot('user');
+
+// ③ 存储
+(async function store() {
+  const hasPersist = !!(navigator.storage && navigator.storage.persist);
+  let persisted = '—';
+  if (hasPersist) { try { persisted = (await navigator.storage.persisted()) ? '已是持久存储' : '未持久'; } catch (e) { persisted = '未知'; } }
+  let est = '—';
+  try { const e = await navigator.storage.estimate(); est = `${Math.round((e.usage || 0) / 1048576 * 10) / 10} MB 已用 / 配额 ${Math.round((e.quota || 0) / 1048576)} MB`; } catch (e) {}
+  let idb = '失败';
+  try {
+    await new Promise((res, rej) => { const r = indexedDB.open('probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('t', { keyPath: 'id' }); r.onsuccess = () => { const db = r.result; const tx = db.transaction('t', 'readwrite'); tx.objectStore('t').put({ id: 1, blob: new Blob([new Uint8Array(1024)]) }); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }; r.onerror = () => rej(r.error); });
+    const back = await new Promise((res, rej) => { const r = indexedDB.open('probe', 1); r.onsuccess = () => { const g = r.result.transaction('t').objectStore('t').get(1); g.onsuccess = () => res(g.result); g.onerror = () => rej(g.error); }; });
+    idb = back && back.blob && back.blob.size === 1024 ? '可写可读（含 Blob）' : '写进去了但读回异常';
+  } catch (e) { idb = '失败：' + (e && e.message); }
+  rows($('#store'), [
+    ['IndexedDB 存取', idb, idb.startsWith('可写可读') ? 'ok' : 'bad'],
+    ['storage.persist()', hasPersist ? persisted : 'API 不存在', hasPersist ? 'ok' : 'bad'],
+    ['估算用量', est],
+  ]);
+  setR('存储', { IndexedDB: idb, persistAPI: hasPersist ? persisted : '不存在', 估算: est });
+})();
+
+// ④ 后台挂起
+let bgTimer = null, bgExpected = 0, bgMaxGap = 0, bgLast = 0, bgRunning = false;
+$('#bgTest').onclick = () => {
+  bgRunning = true; bgExpected = 0; bgMaxGap = 0; bgLast = Date.now();
+  rows($('#bg'), [['状态', '计时中…现在切到别的 App 或锁屏，20 秒后回来']]);
+  clearInterval(bgTimer);
+  bgTimer = setInterval(() => {
+    const now = Date.now(), gap = now - bgLast; bgLast = now;
+    if (gap > bgMaxGap) bgMaxGap = gap;
+    bgExpected++;
+    if (bgExpected >= 20) finishBg();
+  }, 1000);
+};
+function finishBg() {
+  clearInterval(bgTimer); if (!bgRunning) return; bgRunning = false;
+  const lost = Math.max(0, bgExpected === 20 ? bgMaxGap - 1000 : 0);
+  const verdict = bgMaxGap > 2000 ? `切后台期间计时器被挂起（最长 ${(bgMaxGap / 1000).toFixed(1)}s 没有跳）→ 后台生图会暂停` : '计时器基本连续（未被挂起）';
+  rows($('#bg'), [['计时器最长间隔', (bgMaxGap / 1000).toFixed(1) + ' s', bgMaxGap > 2000 ? 'bad' : 'ok'], ['结论', verdict, bgMaxGap > 2000 ? 'bad' : 'ok']]);
+  setR('切后台', { 最长间隔秒: (bgMaxGap / 1000).toFixed(1), 结论: verdict });
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && bgRunning && bgExpected >= 20) finishBg(); });
+
+// ⑤ 其它
+(function misc() {
+  const ua = navigator.userAgent;
+  const list = [
+    ['Web Share（存相册/分享）', ...y(!!navigator.share)],
+    ['Share 带文件', ...y(!!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], 'a.jpg', { type: 'image/jpeg' })] })))],
+    ['Web Bluetooth', ...y('bluetooth' in navigator)],
+    ['屏幕方向锁定', ...y(!!(screen.orientation && screen.orientation.lock))],
+    ['Notification', ...y('Notification' in window)],
+    ['Web Push', ...y(!!(window.PushManager || (window.ServiceWorkerRegistration && 'pushManager' in ServiceWorkerRegistration.prototype)))],
+    ['震动', ...y('vibrate' in navigator)],
+  ];
+  rows($('#misc'), list);
+  list.forEach(([k, v]) => setR(k, v));
+})();
+
+$('#copy').onclick = async () => {
+  const txt = $('#report').textContent;
+  try { await navigator.clipboard.writeText(txt); $('#copy').textContent = '已复制 ✓'; }
+  catch (e) { $('#copy').textContent = '复制失败，请长按选择'; }
+  setTimeout(() => $('#copy').textContent = '复制报告', 2000);
+};
+</script>
+</body>
+</html>
