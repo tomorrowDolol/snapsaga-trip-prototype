@@ -18,7 +18,8 @@ Vite 必须 `base: './'`：线上是 `/snapsaga-trip-prototype/web/` 子路径�
 ```
 web/
 ├── app.html                   # Vite 源入口（只有 #root 与 <script type=module>）；故意不叫 index.html
-├── index.html                 # 构建生成的入口页（引用 ./dist/ 产物）——Pages 的 /web/ 就是它，也要提交
+├── index.html                 # 构建生成的入口页（引用 ./dist/ 产物）——Pages 的 /web/ 就是它，要提交、不要手改
+├── dist/                      # 构建产物（**不提交**：CI 构建后上传）
 ├── package.json               # 依赖与命令（dev / build / test / guard / e2e / verify）
 ├── vite.config.ts             # base './' + react + tailwind + vitest(jsdom)
 ├── tsconfig.json              # 严格模式，零错误才允许 build
@@ -80,33 +81,20 @@ npm run verify     # build → test → guard → e2e 一条龙
 表结构升级只允许**新增版本 + 兼容迁移**，不许清库。老记录没有 `thumb` 字段时会在启动后
 逐张后台回填（一次一张、让出主线程），补好即落库。
 
-## 部署（以及一个要写清楚的权衡）
+## 部署要点（详见根 README）
 
-### 目录形状：为什么有 app.html 和 index.html 两个 HTML
+> 部署形状的**单一真源是 [根 README 的「部署形状」](../README.md#部署形状)**（管线、站点形状表、本地复现、踩过的坑）。
+> 这里只留 `web/` 自己的三条：
 
-GitHub Pages 请求目录时只会找 `index.html`，而 Vite 的源入口如果就叫 `web/index.html`，
-构建产物又会盖掉它。所以：
+- Pages 由 **GitHub Actions** 发布，推送 `main` 即构建 + 门禁（test / build / guard）后上传
+  `scripts/assemble-site.mjs` 组装出的 `_site/`；**`web/dist` 不提交**（`.gitignore` 已忽略，由 CI 构建）。
+- `web/index.html` 是 `npm run build` **生成**的入口页（把引用改写成 `./dist/…`），`…/web/` 就是它——
+  **要提交、不要手改**；改界面改 `web/app.html`。
+- `/web/` 与 `/web/dist/app.html` 都能打开应用；Service Worker 的路径由页面里的 `<link rel=manifest>` 反推
+  （`sw.js` 在 manifest 旁边），两种入口都能拿到正确 scope。
 
-| 文件 | 角色 |
-|------|------|
-| `web/app.html` | Vite **源入口**（产物 `dist/app.html`）—— 改界面改这里 |
-| `web/dist/**` | 构建产物（**不再提交**，CI 构建后上传，见下） |
-| `web/index.html` | `npm run build` **生成**的入口页（把引用改写成 `./dist/…`），`…/web/` 就是它（**提交，不要手改**） |
-
-于是 `/web/` 与 `/web/dist/app.html` 都能打开应用；Service Worker 的路径由页面里的
-`<link rel=manifest>` 反推（`sw.js` 在 manifest 旁边），两种入口都能拿到正确 scope。
-
-### dist 要提交：权衡写清楚
-
-GitHub Pages 目前**从分支直接提供、没有 CI 构建**，所以 `web/dist/` 与生成的 `web/index.html`
-是**提交进仓库**的：
-
-- ✅ 好处：push 到 main 约 1 分钟后线上就是最新产物，零 CI 依赖
-- ❌ 代价：每次改前端都要「build 一次 → 把 dist 与 index.html 一起提交」，产物 diff 会进 git 历史
-- ⏭ 以后可以把 Pages 源切成 **GitHub Actions**（build 后 upload-pages-artifact），
-  那时就可以在 `web/.gitignore` 里加上 `dist/` 与 `index.html`，把产物从仓库里拿掉
-
-`web/.gitignore` 只忽略 `node_modules` 等，**故意不忽略 `dist` 与 `index.html`**。
+为什么源入口不叫 `index.html`：Pages 请求目录只会找 `index.html`，而 Vite 源入口若也叫这个名字，
+构建产物会盖掉它（第一次上线时 `…/web/` 返回 200 但资源全 404，就是这么来的）。
 
 ## 验证矩阵（`npm run verify`）
 
@@ -129,18 +117,21 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
 ## 未覆盖 / 已知限制
 
 - **真机相机路径仍未在 CI 里跑**：e2e 用 canvas 流 + ImageCapture stub，覆盖了三环境与降级逻辑，
-  但真机 `takePhoto` 的分辨率提升只能靠 `../tools/ios-probe.html` 在手机上实测（K12/K13/K14 不变）。
+  但真机 `takePhoto` 的分辨率提升只能靠 `../tools/ios-probe.html` 在手机上实测
+  （这条由 iteration-log 的 **K22** 跟踪；K12/K13/K14 的真机结论见
+  [iteration-history 的 K 条目存档](../docs/iteration-history.md#k-条目存档)）。
 - **AI 直连的 CORS 限制不变**（K3）：原型与新应用都是浏览器直连你配置的 Base，正式版走网关。
 - 未用真实 Key 打通 `api.klong.lat`（无凭证）。
 - 切后台页面被挂起的问题不变（K15）：队列只在页面活跃时推进。
 - PWA 离线缓存是保守策略（导航 network-first、静态资源 stale-while-revalidate）；首次打开仍需网络。
   SW 的 scope 是 `/web/dist/`（sw.js 就在产物目录里），所以主屏安装后的 `start_url` 落在 scope 内、离线可用；
-  而 `/web/` 入口页本身不在 scope 内（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常）——见 iteration-log K23。
+  而 `/web/` 入口页本身不在 scope 内（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常）
+  ——见 [iteration-log 的活跃已知问题 K23](../docs/iteration-log.md#活跃已知问题)。
 
 ## 改哪边？
 
 | 想改的东西 | 改哪里 |
 |-----------|--------|
-| 体验/算法/队列等**真实功能** | `web/src/**`，然后 `npm run verify` → build → 提交 dist |
+| 体验/算法/队列等**真实功能** | `web/src/**`，然后 `npm run verify` 全绿（`web/dist` 由 CI 构建，不提交） |
 | 只想让线上原型立刻变一下（不想碰构建） | 根 `index.html`（记得三同步：版本号 + iteration-log） |
 | 两者都要一致 | 优先改 `web/`（有测试守着），根原型只在必要时同步；`sun.ts` 的改动必须先跑等价性测试 |
