@@ -1,0 +1,5 @@
+node_modules
+.vite
+*.local
+.DS_Store
+# 注意：dist/ 必须提交（GitHub Pages 目前从分支直接提供，没有 CI 构建），见 README 的部署一节

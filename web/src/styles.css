@@ -1,0 +1,288 @@
+/* 拾光 SnapSaga 出行原型 —— 视觉层：**逐行移植**自根目录 index.html 的 <style>，
+   选择器（含 #id）与类名都保持一致，保证两个入口看起来是同一个 App。
+   新增的组件（队列面板 / 设置）可以直接用 Tailwind 工具类，见各组件 JSX。 */
+@import "tailwindcss";
+
+:root{
+    --bg:#F7F3EA; --ink:#1F3336; --soft:#5C6E70; --accent:#FF8A3D; --teal:#2C7A7B;
+    --paper:#fff; --line:rgba(31,51,54,.14); --card:#FFFDF8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.6; overscroll-behavior:none;
+    display:flex; flex-direction:column;
+  }
+  button{font-family:inherit; border:none; cursor:pointer; background:none; color:inherit}
+  input,select{font-family:inherit; font-size:14px; color:var(--ink)}
+
+  /* 顶部 */
+  header.app{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
+    background:var(--ink); color:#fff; flex:0 0 auto;
+  }
+  header.app .logo{font-weight:800; letter-spacing:1px; font-size:16px}
+  header.app .logo em{font-style:normal; color:var(--accent)}
+  header.app .sub{font-size:10px; opacity:.65; letter-spacing:2px}
+  .iconbtn{font-size:20px; padding:6px 10px; color:#fff; opacity:.9; position:relative}
+  header.app .right{display:flex; align-items:center; gap:2px}
+  /* 生图队列入口徽标：右边数字 = 生成中 + 排队中 */
+  .iconbtn .badge{
+    display:none; position:absolute; top:2px; right:2px; min-width:16px; height:16px; padding:0 4px;
+    border-radius:999px; background:var(--accent); color:#fff; font-size:10px; font-weight:800; line-height:16px; text-align:center;
+  }
+  .iconbtn .badge.show{display:block}
+  .iconbtn .badge.hot{background:var(--teal); animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  /* 非安全上下文横幅 */
+  .ctx-banner{
+    display:none; background:#FFE9D6; color:#8A4A12; font-size:12px; padding:8px 14px; line-height:1.5;
+  }
+  .ctx-banner.show{display:block}
+
+  /* 主区 */
+  main{flex:1 1 auto; overflow:hidden; position:relative}
+  .view{position:absolute; inset:0; display:none; flex-direction:column; overflow:hidden}
+  .view.on{display:flex}
+
+  /* ============ 取景 ============ */
+  #camWrap{position:relative; flex:1; background:#0e1617; overflow:hidden}
+  #video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none}
+  #camPlaceholder{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; color:#9fb3b4; text-align:center; padding:30px;
+  }
+  #camPlaceholder .big{font-size:44px}
+  #camPlaceholder p{font-size:13px; max-width:280px}
+  /* 取景信息：当前分辨率 + 本次快门用的是「静止图像」还是「抓帧」 */
+  #camMeta{
+    position:absolute; left:10px; bottom:10px; z-index:6; display:none;
+    background:rgba(14,22,23,.62); color:#e8f1f1; font-size:11px; line-height:1.5;
+    padding:5px 9px; border-radius:8px; backdrop-filter:blur(3px); pointer-events:none;
+  }
+  #camMeta b{color:#ffb27a; font-weight:700}
+  #startCam{
+    background:var(--accent); color:#fff; font-weight:700; font-size:15px;
+    padding:12px 30px; border-radius:999px;
+  }
+  /* 网格叠加 */
+  #gridLayer{position:absolute; inset:0; pointer-events:none; z-index:5; display:none}
+  #gridLayer svg{width:100%; height:100%}
+  /* 水平仪 */
+  #levelHud{
+    position:absolute; top:calc(env(safe-area-inset-top) + 8px); left:50%; transform:translateX(-50%);
+    z-index:8; display:none; align-items:center; gap:8px;
+    background:rgba(16,28,29,.55); backdrop-filter:blur(6px); border-radius:999px; padding:6px 14px;
+    color:#fff; font-size:12px; font-weight:600;
+  }
+  #levelDot{width:10px; height:10px; border-radius:50%; background:#ff5d5d; transition:background .2s}
+  #levelDot.ok{background:#5dd88b}
+  /* 黄金时刻 */
+  #sunBar{
+    position:absolute; left:12px; right:12px; bottom:12px; z-index:8;
+    background:rgba(16,28,29,.55); backdrop-filter:blur(8px); border-radius:14px;
+    padding:10px 14px; color:#fff; display:flex; align-items:center; gap:10px; font-size:12px;
+  }
+  #sunBar .ico{font-size:20px}
+  #sunBar .t1{font-weight:800; font-size:12.5px}
+  #sunBar .t2{opacity:.8; font-size:11px}
+  /* 场景选择 */
+  #sceneBar{
+    flex:0 0 auto; display:flex; gap:8px; overflow-x:auto; padding:10px 12px;
+    background:var(--card); border-top:1px solid var(--line); scrollbar-width:none;
+  }
+  #sceneBar::-webkit-scrollbar{display:none}
+  .scene-chip{
+    flex:0 0 auto; font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:999px;
+    background:var(--bg); border:1px solid var(--line); color:var(--soft);
+  }
+  .scene-chip.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  #sceneTip{
+    flex:0 0 auto; background:var(--card); padding:10px 16px 14px; font-size:12.5px; color:var(--soft);
+    border-top:1px solid var(--line); min-height:44px;
+  }
+  #sceneTip b{color:var(--teal)}
+  /* 拍完自动生图：开关 + 风格选择（生图在后台排队，不用等） */
+  #genBar{flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card); border-top:1px solid var(--line)}
+  #genToggle{flex:0 0 auto; font-size:12px; font-weight:800; padding:7px 12px; border-radius:999px; background:var(--bg); border:1px solid var(--line); color:var(--soft); white-space:nowrap}
+  #genToggle.on{background:var(--teal); color:#fff; border-color:var(--teal)}
+  #genStyles{flex:1 1 auto; display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; min-width:0}
+  #genStyles::-webkit-scrollbar{display:none}
+  #genStyles.off{opacity:.4}
+  .gen-chip{flex:0 0 auto; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; background:var(--bg); border:1px solid var(--line); color:var(--soft); white-space:nowrap}
+  .gen-chip.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  /* 快门行 */
+  #shutterRow{
+    flex:0 0 auto; display:flex; align-items:center; justify-content:space-around;
+    padding:12px 24px calc(env(safe-area-inset-bottom) + 14px); background:var(--card);
+  }
+  .side-btn{width:52px; text-align:center; font-size:10.5px; color:var(--soft)}
+  .side-btn .ic{font-size:22px; display:block; margin-bottom:2px}
+  #shutter{
+    width:68px; height:68px; border-radius:50%; border:4px solid var(--ink); background:#fff;
+    box-shadow:0 4px 14px rgba(31,51,54,.25); position:relative;
+  }
+  #shutter:active{transform:scale(.92)}
+  #shutter::after{content:""; position:absolute; inset:6px; border-radius:50%; background:var(--accent)}
+  #flash{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:50; transition:opacity .12s}
+
+  /* ============ 通用列表页 ============ */
+  .page-head{padding:14px 16px 8px}
+  .page-head h2{font-size:18px}
+  .page-head p{font-size:12px; color:var(--soft)}
+  .empty{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; color:var(--soft); font-size:13.5px; text-align:center; padding:30px;
+  }
+  .empty .big{font-size:42px; opacity:.7}
+
+  /* 胶卷 */
+  #filmGrid,#albumGrid{flex:1; overflow-y:auto; padding:4px 12px 20px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-content:start}
+  .film-cell{position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; background:#e8e2d5}
+  .film-cell img{width:100%; height:100%; object-fit:cover}
+  .film-cell .ts{position:absolute; left:5px; bottom:4px; font-size:9px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  .film-cell.sel{outline:3px solid var(--accent); outline-offset:-3px}
+  .film-cell .sel-mark{position:absolute; right:5px; top:5px; width:20px; height:20px; border-radius:50%;
+    background:var(--accent); color:#fff; font-size:12px; display:none; align-items:center; justify-content:center}
+  .film-cell.sel .sel-mark{display:flex}
+  .film-cell .src-mark{position:absolute; right:5px; top:5px; font-size:11px; text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  #filmActions{
+    flex:0 0 auto; display:flex; gap:10px; padding:12px 16px calc(env(safe-area-inset-bottom) + 14px);
+    background:var(--card); border-top:1px solid var(--line);
+  }
+  .btn{
+    flex:1; padding:13px; border-radius:14px; font-size:14.5px; font-weight:800; text-align:center;
+    background:var(--bg); color:var(--soft); border:1px solid var(--line);
+  }
+  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .btn.teal{background:var(--teal); color:#fff; border-color:var(--teal)}
+  .btn:disabled{opacity:.45}
+
+  /* 拍立得工坊 */
+  #polaStage{flex:1; display:flex; align-items:center; justify-content:center; padding:14px; overflow:hidden}
+  #polaBox{width:min(78vw,330px); background:#fff; padding:4.2% 4.2% 0; border-radius:3px;
+    box-shadow:0 16px 40px rgba(31,51,54,.28); transform:rotate(-1.6deg); position:relative}
+  #polaImgWrap{position:relative; overflow:hidden; background:#e8e2d5; transition:filter 2.6s ease, opacity 2.6s ease}
+  #polaImgWrap canvas{width:100%; height:auto; display:block}
+  .polaroid-developing #polaImgWrap{filter:brightness(2.4) contrast(.3) saturate(.4); opacity:.2}
+  #polaCap{
+    display:flex; align-items:center; justify-content:center;
+    padding:6px 8px; font-family:"Kaiti SC","STKaiti","Marker Felt",cursive; font-size:14px; color:#6B5B4A;
+    text-align:center;
+  }
+  .pola-bar{
+    flex:0 0 auto; background:var(--card); border-top:1px solid var(--line);
+    padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);
+  }
+  .pola-bar .row{display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap}
+  .pola-bar label{font-size:12px; color:var(--soft); flex:0 0 auto}
+  .seg{display:flex; background:var(--bg); border-radius:10px; padding:3px; gap:3px}
+  .seg button{font-size:12px; font-weight:700; padding:6px 12px; border-radius:8px; color:var(--soft)}
+  .seg button.on{background:var(--ink); color:#fff}
+  #polaNote{flex:1; min-width:120px; border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--bg)}
+  .pola-actions{display:flex; gap:10px}
+  .dice{flex:0 0 auto; width:46px; background:var(--bg); border:1px solid var(--line); border-radius:12px; font-size:18px}
+
+  /* 修图 */
+  #editStage{flex:1; display:flex; align-items:center; justify-content:center; padding:14px; position:relative; overflow:hidden}
+  #editStage canvas, #editStage img{max-width:100%; max-height:100%; border-radius:12px; box-shadow:0 12px 30px rgba(31,51,54,.2)}
+  #aiBusy{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+    background:rgba(247,243,234,.88); backdrop-filter:blur(4px); z-index:10; text-align:center; padding:20px;
+  }
+  #aiBusy.show{display:flex}
+  .filmstrip-loader{display:flex; gap:4px}
+  .filmstrip-loader i{width:8px; height:16px; background:var(--ink); opacity:.25; border-radius:2px; animation:flick 1s infinite}
+  .filmstrip-loader i:nth-child(2){animation-delay:.15s}
+  .filmstrip-loader i:nth-child(3){animation-delay:.3s}
+  .filmstrip-loader i:nth-child(4){animation-delay:.45s}
+  @keyframes flick{0%,100%{opacity:.2}50%{opacity:.9}}
+  .edit-bar{flex:0 0 auto; background:var(--card); border-top:1px solid var(--line);
+    padding:10px 16px calc(env(safe-area-inset-bottom) + 12px)}
+  #styleRow{display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none}
+  #styleRow::-webkit-scrollbar{display:none}
+  .style-chip{flex:0 0 auto; font-size:12.5px; font-weight:700; padding:7px 14px; border-radius:999px;
+    background:var(--bg); border:1px solid var(--line); color:var(--soft)}
+  .style-chip.on{background:var(--teal); color:#fff; border-color:var(--teal)}
+  .slider-row{display:flex; align-items:center; gap:10px; margin-top:4px}
+  .slider-row label{font-size:12px; color:var(--soft); flex:0 0 auto}
+  input[type=range]{flex:1; accent-color:var(--accent)}
+  .edit-actions{display:flex; gap:10px; margin-top:10px}
+  .edit-actions .btn{padding:11px}
+
+  /* ============ 设置抽屉 ============ */
+  #settingsMask,#queueMask{position:fixed; inset:0; background:rgba(16,28,29,.5); z-index:98; display:none}
+  #settingsMask.show,#queueMask.show{display:block}
+  #settings,#queuePanel{
+    position:fixed; left:0; right:0; bottom:0; z-index:99; background:var(--card);
+    border-radius:22px 22px 0 0; max-height:86vh; overflow-y:auto; display:none;
+    padding:8px 20px calc(env(safe-area-inset-bottom) + 20px); transform:translateY(100%); transition:transform .3s;
+  }
+  #settings.show,#queuePanel.show{display:block; transform:none}
+  #settings .grab,#queuePanel .grab{width:44px; height:5px; border-radius:99px; background:var(--line); margin:6px auto 12px}
+  #settings h3,#queuePanel h3{font-size:16px; margin:18px 0 8px}
+  #settings h3:first-of-type,#queuePanel h3:first-of-type{margin-top:4px}
+  #settings p.desc,#queuePanel p.desc{font-size:12px; color:var(--soft); margin-bottom:8px}
+
+  /* 生图队列面板 */
+  #queueSummary{font-size:11.5px; color:var(--soft); margin-bottom:10px}
+  .queue-empty{text-align:center; color:var(--soft); font-size:13px; padding:26px 10px; line-height:1.8}
+  .queue-empty span{font-size:11.5px; opacity:.8}
+  .q-item{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .q-item:last-child{border-bottom:none}
+  .q-thumb{flex:0 0 auto; width:54px; height:54px; border-radius:10px; object-fit:cover; background:#e8e2d5; display:block}
+  .q-main{flex:1; min-width:0}
+  .q-title{font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .q-badge{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; background:var(--bg); color:var(--soft); border:1px solid var(--line)}
+  .q-badge.running{background:#E7F3F3; color:var(--teal); border-color:#BCE0E0}
+  .q-badge.done{background:#E9F6EC; color:#2F7A45; border-color:#C6E7D1}
+  .q-badge.failed{background:#FDEBEA; color:#B23B32; border-color:#F6CFCB}
+  .q-time{font-size:11px; color:var(--soft); margin-top:2px}
+  .q-err{font-size:11.5px; color:#B23B32; margin-top:4px; line-height:1.5; word-break:break-word}
+  .q-acts{display:flex; gap:8px; margin-top:6px}
+  .q-acts .mini{padding:6px 12px; font-size:12px}
+  .q-dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--teal); animation:pulse 1s infinite; vertical-align:middle}
+
+  /* AI 相册大图查看 */
+  #lightbox{position:fixed; inset:0; z-index:140; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(16,28,29,.94); padding:20px}
+  #lightbox.show{display:flex}
+  #lbImg{max-width:92vw; max-height:62vh; border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,.5)}
+  #lbMeta{color:#fff; opacity:.8; font-size:12px; text-align:center}
+  .lb-actions{display:flex; gap:10px}
+  .lb-actions .btn{min-width:92px; background:rgba(255,255,255,.14); color:#fff; border-color:transparent}
+  .lb-actions .btn.primary{background:var(--accent); color:#fff}
+  .lb-actions .btn.danger{background:#B23B32; color:#fff}
+  #lbClose{color:#fff; opacity:.85; font-size:13px; font-weight:700}
+  .field{display:flex; gap:8px; margin-bottom:8px}
+  .field input{flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); min-width:0}
+  .field input:focus{outline:2px solid rgba(255,138,61,.4)}
+  .mini{font-size:12.5px; font-weight:700; padding:9px 14px; border-radius:10px; background:var(--teal); color:#fff; flex:0 0 auto}
+  .mini.ghost{background:var(--bg); color:var(--soft); border:1px solid var(--line)}
+
+  /* Toast */
+  #toast{
+    position:fixed; left:50%; bottom:110px; transform:translateX(-50%) translateY(20px); z-index:120;
+    background:rgba(31,51,54,.94); color:#fff; font-size:13px; padding:10px 18px; border-radius:999px;
+    opacity:0; pointer-events:none; transition:.25s; max-width:86vw; text-align:center;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  /* 底部导航 */
+  nav.bottom{
+    flex:0 0 auto; display:flex; background:var(--card); border-top:1px solid var(--line);
+    padding:6px 8px calc(env(safe-area-inset-bottom) + 6px);
+  }
+  nav.bottom button{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:1px;
+    font-size:10px; color:var(--soft); padding:5px 0;
+  }
+  nav.bottom button .ic{font-size:21px}
+  nav.bottom button.on{color:var(--accent); font-weight:800}
+
+/* ===== React 挂载点 =====
+   让 header / main / nav 仍像 body 的直接 flex 子项那样排布（原型里它们是 body 的子元素）。
+   styles.css 以上部分逐行移植自根目录 index.html，选择器与类名保持一致，保证两个入口同貌。 */
+#root{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}

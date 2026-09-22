@@ -2,6 +2,95 @@
 
 记录每版改动、验证情况与已知问题。新版本请追加在最上方。
 
+> v0.7 起本仓库有两个入口：根 `index.html`（单文件原型，v0.6 冻结，**本版一行未改**）与
+> `web/`（工程化 React 版，线上 <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/>）。
+> 功能与数据以「两者同源」为前提：同一个 IndexedDB 库、同一批 localStorage 键。
+
+---
+
+## v0.7 — 2026-09-22（工程化迁移：React 19 + TS + Vite，功能对齐 + 真测试 + 红线 guard）
+
+### 背景
+
+原型单文件已到 74 KB / 1388 行，队列、缩略图、相机取图、拍立得、修图全挤在一个 `<script>` 里：
+改一处要读全文，没有任何测试，唯一的验收手段是几个靠「从 HTML 里抽源码 eval」的脚本。
+本版把功能**逐项对齐地**搬到工程化实现上（不新增产品功能），并把现有验收脚本搬成真测试。
+
+**根 `index.html` 一行未改**（仍是 v0.6），新应用在 `web/`，线上子路径部署。
+
+### 技术栈（照用户指定，不自创）
+
+React 19 + react-dom · TypeScript 5.9（严格模式）· Vite（`base: './'`）· Tailwind CSS 4 ·
+Zustand 5（状态）· Vitest 5 + jsdom（单测）· 手写 `public/sw.js` + `manifest.webmanifest`（PWA）。
+**不引入**路由库 / 数据请求库 / 组件库 / CDN 依赖；ESLint/Prettier 未上（与参考项目一致）。
+
+### 改动点
+
+1. **目录**：新增 `web/`（`src/domain` 纯逻辑、`src/data` 数据层、`src/store` 状态、
+   `src/components` 视图、`src/test` 单测、`e2e/` 验收、`scripts/guard.mjs`）。
+2. **功能对齐 10 项**：取景（前后摄 / 网格随场景 / 水平仪 / 8 场景卡 / 快门闪白）、相机取图
+   （静止图像优先 + 一次性抓帧回落 + 按能力下约束 + 取景信息条）、黄金时刻、胶卷（存取/删除/选中/
+   缩略图/增量插入）、拍立得（合成 + 显影）、修图（本地滤镜 + 可选 AI 重绘）、生图队列（并发 4 /
+   严格 FIFO / 排队 / 失败可重试 / 归档 / 面板徽标 / 持久化恢复）、AI 相册（分栏/大图/分享/保存/删除）、
+   设置（Base/Key/模型/测试连通/清空全部数据）、启动申请 `navigator.storage.persist()`。
+3. **太阳算法逐行等价搬迁**（铁律 4）：`src/domain/sun.ts` 保持原运算顺序与函数拆解，只加类型；
+   新增 `src/test/sun.equivalence.test.ts` —— 把根 `index.html` 里的**原始实现抽出来在 node 里跑**，
+   四城市 × 36 日期 × 5 时刻 × 6 字段逐值比对（epsilon 1e-9 ms）。
+4. **数据与设置向后兼容**：库名 `snapsaga`、仓 `photos`/`queue`、照片记录字段（含 `thumb`）、
+   `ss_ai_base`/`ss_ai_key`/`ss_ai_model`/`ss_gen_auto`/`ss_gen_style`/`snapsaga_geo` 全部沿用；
+   AI 默认 Base 仍是 `https://api.klong.lat/v1`（旧默认自动迁移、自定义值尊重）。表结构只允许新增版本 + 兼容迁移。
+5. **验收脚本搬成真测试**（断言未放松）：队列调度 18 条断言 → `src/test/genQueue.test.ts`；
+   缩略图 13 项 / 拍照三环境 17 项 / AI 默认 Base 9 项 / 主链路 33 项 → `web/e2e/`（跑 `dist` 产物）。
+   两处必要适配（换实现方式，非放宽）：objectURL 那条「revoke≈create」比例断言换成
+   「重渲染 created 增量为 0」+「卸载即 revoke 且活跃数不增长」；openai 常量计数改为「HTML 0 处 + 产物 1 处」。
+6. **`npm run guard`**（47 项，学 ImgX Studio 思路）：源码侧 31 项（快门路径不含 fetch/AI await、
+   `ImageCapture` 在抓帧回落之前、缩略图 320/.72、列表挂 thumb、默认 Base、无本机绝对路径…）、
+   产物侧 11 项（`base` 相对、产物里 ImageCapture/takePhoto/drawImage 都在、旧默认仅 1 处、PWA 文件已产出…）、
+   **产物运行时 5 项**（真 Chromium 加载 dist + 生图接口挂死 → 6 张照片仍全部入库、队列并发峰值仍为 4）。
+   最后一段是关键：防「源码对但构建出来不对」。
+7. **`src/debug/bridge.ts`**：暴露 `window.__snapsaga` 与旧脚本用的只读全局名（`PHOTOS`/`DB`/`GenQueue`/`cam`…），
+   使根原型那批验收脚本能对准新产物跑；视图的 id/类名与原型保持一致，DOM 形状不变。
+8. **文档**：新增 `web/README.md`（结构/命令/数据兼容/部署权衡/未覆盖项）；`AGENTS.md` 铁律 1 下补例外说明；
+   根 `README.md` 增加 web 入口与目录。
+9. **PWA**：`public/sw.js`（导航 network-first、静态资源 stale-while-revalidate，跨域生图请求不缓存）
+   + `manifest.webmanifest` + SVG/PNG 图标（`scripts/make-icons.mjs` 可重新生成）。
+
+### 实测数字
+
+| 指标 | 数值 | 来源 |
+|------|------|------|
+| 快门点击同步返回（生图接口故意挂死不返回） | **0.6–0.9 ms** | guard 运行时 / e2e |
+| 快门点击返回（`takePhoto` 故意拖 300 ms） | **39 ms** | e2e 拍照三环境 |
+| 原图 → 缩略图 | **1356.2 KB → 30.3 KB（44.7×）** | e2e 缩略图 |
+| 老记录回填 | 1293.1 KB → 31.0 KB，且已落库 | e2e 缩略图 |
+| 6 连拍队列 | 生成中 4 + 排队 2，页面侧 fetch 并发峰值 **4** | e2e 主链路 |
+| 刷新恢复 | 3 条未完成续跑 + 6 条历史保留，全部归档 | e2e 主链路 |
+| 构建产物 | JS 269.1 KB（gzip 86.4 KB）+ CSS 20.3 KB（gzip 5.1 KB） | vite build |
+
+### 验证情况
+
+| 项目 | 命令 | 结果 |
+|------|------|------|
+| TS 严格模式 + 构建 | `npm run build` | PASS：`tsc --noEmit` 零错误，vite 产物 442 ms |
+| 单测（Vitest + jsdom） | `npm test` | PASS：**5 文件 / 53 测试**（队列调度 18 条对应断言 + 持久化恢复、缩略图尺寸与编码、AI Base 取值、太阳算法四城市等价、相机三环境与能力约束） |
+| 红线 guard | `npm run guard` | PASS：**47 项**（源码 31 / 产物 11 / 产物运行时 5） |
+| 验收 e2e（真 Chromium + 真 IndexedDB） | `npm run e2e` | PASS：**75 项**（主链路 35 / 缩略图 13 / 拍照 17 / AI Base 10），4/4 组通过 |
+| 线上原型未被触碰 | `git diff --stat main -- index.html` | 无改动（根原型仍是 v0.6） |
+| 视觉对齐 | Playwright 截图对比（移动 390×780 / 桌面 1280×800：取景/胶卷/拍立得/修图/相册/设置/队列） | 与原型逐屏一致，仅两处**改善**：打开相机后网格立即出现（原型要先切一次视图才出现）、拍立得未选图时提示文案更明确 |
+| 未覆盖 | — | **真机相机路径仍未在 CI 里跑**（e2e 只有 canvas 流 + ImageCapture stub）；未用真实 Key 打通 `api.klong.lat`；未在 iOS Safari 上实测新应用 |
+
+### 已知问题与限制
+
+| # | 问题 | 影响 | 计划 |
+|---|------|------|------|
+| K19 | **`web/dist` 必须提交进仓库**：Pages 目前从分支直接提供、没有 CI，不提交产物线上就拿不到新版本 | 每次改前端都要 build 一次并把产物一起提交，产物 diff 进 git 历史 | 把 Pages 源切成 GitHub Actions（build → upload-pages-artifact）后，即可在 `web/.gitignore` 里加上 `dist/`。权衡已写在 `web/README.md` |
+| K20 | 现在有**两套实现**（根 `index.html` 与 `web/`），同一功能改两边会漂移；只有太阳算法有数值等价性测试守着 | 根原型的后续改动不会自动出现在 web 版（反之亦然） | 功能演进只改 `web/`（有测试 + guard），根原型冻结；若必须两边同改，先改 `web/` 再同步并跑 `npm run verify` |
+| K21 | 旧验收脚本（`snapsaga_queue_check/*.cjs`、`ss_e2e.cjs`）依赖页面全局（`PHOTOS`/`DB`/`GenQueue`/`cam`…），新应用靠 `src/debug/bridge.ts` 提供只读兼容层才能跑 | 删掉 bridge 就会让那批脚本失效（`web/e2e/` 已内化同样断言，不受影响） | 保留 bridge（零成本、便于线上排查）；新验收一律写在 `web/e2e/` |
+| K22 | e2e 里相机仍是 canvas 流 + `ImageCapture` stub；真机 `takePhoto` 的分辨率提升、iPhone 真实能力清单都不在 CI 覆盖内（延续 K12/K13/K14） | 真机行为仍可能与本机不一致（历史教训：v0.4 曾误判 iOS 不支持 takePhoto） | 出游实测时用 `tools/ios-probe.html` + 新应用的取景信息条（会显示实际分辨率与本次是静止图像还是抓帧）复测 |
+
+另外：**K1（无 Service Worker）/ K4（无 manifest 与图标）在 `web/` 版本已解决**
+（`public/sw.js` 保守缓存 + `manifest.webmanifest` + SVG/PNG 图标）；根原型仍是单文件，按需保留这两条。
+
 ---
 
 ## v0.6 — 2026-09-22（缩略图 + 增量渲染：列表不再挂 3MB 原图）

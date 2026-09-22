@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="拾光 SnapSaga">
+  <rect width="512" height="512" rx="112" fill="#1F3336"/>
+  <circle cx="256" cy="228" r="86" fill="#FF8A3D"/>
+  <path d="M0 316h512v84a112 112 0 0 1-112 112H112A112 112 0 0 1 0 400z" fill="#2C7A7B"/>
+  <g stroke="#F7F3EA" stroke-width="10" stroke-linecap="round" opacity=".9">
+    <path d="M256 300v84"/>
+    <path d="M214 342l42 42 42-42"/>
+  </g>
+  <circle cx="370" cy="150" r="26" fill="#F7F3EA" opacity=".85"/>
+</svg>
