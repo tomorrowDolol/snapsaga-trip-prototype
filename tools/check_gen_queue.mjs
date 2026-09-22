@@ -201,6 +201,13 @@ function extractFn(src, header) {
     /getCapabilities/.test(html) && /supports\('focusMode'/.test(html));
   check('启动时主动申请持久存储（persist）',
     /navigator\.storage\.persist\(\)/.test(html) && /ensurePersist\(\);/.test(html));
+  // 缩略图：列表必须挂小图；生成必须 fire-and-forget（不得进快门 await 链）
+  check('列表渲染用缩略图（p.thumb 优先）', /p\.thumb\|\|p\.blob/.test(html));
+  check('缩略图生成不在快门 await 链上（queueThumb 不被 await）',
+    /queueThumb\(rec,/.test(html) && !/await\s+queueThumb\(/.test(html));
+  check('图片带 decoding="async"（不阻塞渲染）', /decoding="async"/.test(html));
+  check('新照片走增量插入（prepend），不重建整格网',
+    /grid\.prepend\(filmCellFor\(rec\)\)/.test(html));
   check('两条取图路都只产出 Blob（kind 标记 still/frame）',
     /kind:'still'/.test(grabStill) && /kind:'frame'/.test(grabStill));
   check('addPhoto() 只写本机 IndexedDB，不碰 AI', !/fetch\(|aiRedrawCore|GenQueue/.test(addPhoto));

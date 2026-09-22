@@ -293,7 +293,7 @@
 <header class="app">
   <div>
     <div class="logo">拾光<em>·</em>SnapSaga</div>
-    <div class="sub">TRIP PROTOTYPE v0.5</div>
+    <div class="sub">TRIP PROTOTYPE v0.6</div>
   </div>
   <div class="right">
     <button class="iconbtn" id="btnQueue" title="生图队列">✨<span class="badge" id="queueBadge">0</span></button>
@@ -525,6 +525,51 @@ const DB={db:null,
 };
 const PHOTOS=[]; const AI_ALBUM=[]; const selected=new Set();
 
+/* ================= 缩略图 =================
+   列表只挂小图：真拍照原图 3MB 级（解码后约 49MB/张），直接塞网格会拖死滚动。
+   策略：先入库原图 → 后台补缩略图 → 补好后只换这一格的图，快门路径绝不等它。 */
+const THUMB_MAX=320, THUMB_Q=.72;
+async function makeThumb(blob){
+  try{
+    if(!blob) return null;
+    const bmp=await createImageBitmap(blob);          // 解码交给浏览器，不占主线程
+    const sc=Math.min(1,THUMB_MAX/Math.max(bmp.width,bmp.height));
+    const w=Math.max(1,Math.round(bmp.width*sc)), h=Math.max(1,Math.round(bmp.height*sc));
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(bmp,0,0,w,h);
+    if(bmp.close) bmp.close();
+    return await new Promise(r=>c.toBlob(r,'image/jpeg',THUMB_Q));
+  }catch(e){ return null; }                            // 不支持/失败 → 回落用原图
+}
+function queueThumb(rec,onReady){
+  if(!rec||rec.thumb) return;
+  makeThumb(rec.blob).then(async t=>{
+    if(!t) return;
+    rec.thumb=t;
+    try{ await DB.put(rec); }catch(e){}
+    if(onReady) onReady(rec);
+  });
+}
+/* 历史照片（本版之前存的）后台逐张补缩略图：一次一张，让出主线程 */
+function backfillThumbs(){
+  const todo=PHOTOS.filter(p=>!p.thumb).concat(AI_ALBUM.filter(p=>!p.thumb));
+  if(!todo.length) return;
+  let i=0;
+  const step=()=>{
+    if(i>=todo.length) return;
+    const rec=todo[i++];
+    makeThumb(rec.blob).then(async t=>{
+      if(t){
+        rec.thumb=t;
+        try{ await DB.put(rec); }catch(e){}
+        if(rec.kind==='ai') refreshAlbumThumb(rec); else refreshFilmThumb(rec);
+      }
+      setTimeout(step,80);
+    });
+  };
+  setTimeout(step,400);
+}
+
 /* ================= 相机 ================= */
 const cam={stream:null, facing:'environment', mode:'frame', res:'', lastShot:'', still:('ImageCapture' in window), caps:{}};
 function camMeta(){
@@ -615,7 +660,10 @@ async function capture(){
 }
 async function addPhoto(blob, shot){
   const rec={id:'p'+Date.now()+Math.random().toString(36).slice(2,6), blob, ts:Date.now(), shot:shot||'frame'};
-  await DB.put(rec); PHOTOS.unshift(rec); renderFilm(); return rec;
+  await DB.put(rec); PHOTOS.unshift(rec);
+  prependFilmCell(rec);              // 增量：只插一格，不重建整个网格
+  queueThumb(rec, refreshFilmThumb); // 后台补缩略图，快门不等它
+  return rec;
 }
 
 /* ================= 网格叠加 ================= */
@@ -941,25 +989,43 @@ async function editSave(){
 
 /* ================= 胶卷 ================= */
 let filmUrls=[];   // 当前网格每张缩略图的 objectURL，重渲染时回收，避免长时间占内存
+function filmCellFor(p){
+  const cell=document.createElement('div');
+  cell.className='film-cell'+(selected.has(p.id)?' sel':'');
+  cell.dataset.id=p.id;
+  const url=URL.createObjectURL(p.thumb||p.blob); filmUrls.push(url); cell._url=url;
+  cell.innerHTML=`<img src="${url}" decoding="async" loading="lazy"><span class="ts">${fmtTime(new Date(p.ts))}</span><span class="sel-mark">✓</span>`;
+  cell.addEventListener('click',()=>{
+    if(selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
+    cell.classList.toggle('sel');
+  });
+  cell.addEventListener('contextmenu',async e=>{
+    e.preventDefault();
+    if(confirm('删除这张照片？')){ await DB.del(p.id); const i=PHOTOS.findIndex(x=>x.id===p.id); if(i>-1)PHOTOS.splice(i,1); selected.delete(p.id); renderFilm(); }
+  });
+  return cell;
+}
+/* 增量：新拍一张只插一格（不重建整个网格，保留其它格子的解码结果） */
+function prependFilmCell(rec){
+  const grid=$('#filmGrid'); if(!grid) return;
+  $('#emptyFilm').style.display='none';
+  grid.prepend(filmCellFor(rec));
+}
+/* 缩略图补好后就地换图：先挂新图再回收旧 URL */
+function refreshFilmThumb(rec){
+  const grid=$('#filmGrid'); if(!grid||!rec.thumb) return;
+  const cell=grid.querySelector(`[data-id="${rec.id}"]`); if(!cell) return;
+  const url=URL.createObjectURL(rec.thumb); filmUrls.push(url);
+  const img=cell.querySelector('img'); if(img) img.src=url;
+  const old=cell._url; cell._url=url;
+  if(old){ const i=filmUrls.indexOf(old); if(i>-1)filmUrls.splice(i,1); try{URL.revokeObjectURL(old)}catch(e){} }
+}
 async function renderFilm(){
   const grid=$('#filmGrid');
   const old=filmUrls; filmUrls=[];
   $('#emptyFilm').style.display=PHOTOS.length?'none':'flex';
   grid.innerHTML='';
-  for(const p of PHOTOS){
-    const cell=document.createElement('div'); cell.className='film-cell'+(selected.has(p.id)?' sel':'');
-    const url=URL.createObjectURL(p.blob); filmUrls.push(url);
-    cell.innerHTML=`<img src="${url}"><span class="ts">${fmtTime(new Date(p.ts))}</span><span class="sel-mark">✓</span>`;
-    cell.addEventListener('click',()=>{
-      if(selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
-      cell.classList.toggle('sel');
-    });
-    cell.addEventListener('contextmenu',async e=>{
-      e.preventDefault();
-      if(confirm('删除这张照片？')){ await DB.del(p.id); const i=PHOTOS.findIndex(x=>x.id===p.id); if(i>-1)PHOTOS.splice(i,1); selected.delete(p.id); renderFilm(); }
-    });
-    grid.appendChild(cell);
-  }
+  for(const p of PHOTOS) grid.appendChild(filmCellFor(p));
   old.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
 }
 
@@ -1085,6 +1151,7 @@ async function archiveResult(task, outBlob){
   await DB.put(rec);
   AI_ALBUM.unshift(rec);
   renderAlbum();
+  queueThumb(rec, r=>{ task.thumb=r.thumb; refreshAlbumThumb(r); renderQueuePanel(); });   // 归档后后台补缩略图（大图仍用原图）
   toast('生图完成：'+(rec.styleName||'AI')+' ✨ 已归档到 AI 相册',2600);
 }
 
@@ -1107,7 +1174,10 @@ function renderQueuePanel(){
     const pos=new Map(); GenQueue.queued().forEach((t,i)=>pos.set(t.id,i+1));
     list.innerHTML=GenQueue.items.map(t=>{
       let url='';
-      if(t.blob){ url=URL.createObjectURL(t.blob); queueThumbs.push(url); }
+      // 缩略图优先：已完成的结果 > 源照片缩略图 > 原图（避免面板里挂一堆 3MB 原图）
+      const srcPhoto=PHOTOS.find(x=>x.id===t.photoId);
+      const thumbBlob=(t.status==='done'&&t.thumb)?t.thumb:(srcPhoto&&srcPhoto.thumb)?srcPhoto.thumb:(t.status==='done'&&t.result)?t.result:t.blob;
+      if(thumbBlob){ url=URL.createObjectURL(thumbBlob); queueThumbs.push(url); }
       const label=t.status==='queued'?`排队中 · 第 ${pos.get(t.id)} 位`:Q_LABEL[t.status];
       const err=(t.status==='failed'&&t.error)?`<div class="q-err">${esc(t.error)}</div>`:'';
       let acts='';
@@ -1115,7 +1185,7 @@ function renderQueuePanel(){
       else if(t.status==='done') acts=`<button class="mini ghost q-act" data-drop="${t.id}">移除</button>`;
       const running=t.status==='running'?' · <span class="q-dot"></span> 暗房冲洗中':'';
       return `<div class="q-item ${t.status}">
-        ${url?`<img class="q-thumb" src="${url}" alt="">`:'<div class="q-thumb"></div>'}
+        ${url?`<img class="q-thumb" src="${url}" alt="" decoding="async" loading="lazy">`:'<div class="q-thumb"></div>'}
         <div class="q-main">
           <div class="q-title">${esc(t.styleName||'AI 生图')} <span class="q-badge ${t.status}">${label}</span></div>
           <div class="q-time">${fmtTime(new Date(t.ts))}${running}</div>
@@ -1138,14 +1208,23 @@ async function renderAlbum(){
   const old=albumUrls; albumUrls=[];
   $('#emptyAlbum').style.display=AI_ALBUM.length?'none':'flex';
   grid.innerHTML='';
-  for(const p of AI_ALBUM){
-    const cell=document.createElement('div'); cell.className='film-cell';
-    const url=URL.createObjectURL(p.blob); albumUrls.push(url);
-    cell.innerHTML=`<img src="${url}"><span class="ts">${esc(p.styleName||'AI')} ${fmtTime(new Date(p.ts))}</span><span class="src-mark">✨</span>`;
-    cell.addEventListener('click',()=>openLightbox(p));
-    grid.appendChild(cell);
-  }
+  for(const p of AI_ALBUM) grid.appendChild(albumCellFor(p));
   old.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
+}
+function albumCellFor(p){
+  const cell=document.createElement('div'); cell.className='film-cell'; cell.dataset.id=p.id;
+  const url=URL.createObjectURL(p.thumb||p.blob); albumUrls.push(url); cell._url=url;
+  cell.innerHTML=`<img src="${url}" decoding="async" loading="lazy"><span class="ts">${esc(p.styleName||'AI')} ${fmtTime(new Date(p.ts))}</span><span class="src-mark">✨</span>`;
+  cell.addEventListener('click',()=>openLightbox(p));
+  return cell;
+}
+function refreshAlbumThumb(rec){
+  const grid=$('#albumGrid'); if(!grid||!rec.thumb) return;
+  const cell=grid.querySelector(`[data-id="${rec.id}"]`); if(!cell) return;
+  const url=URL.createObjectURL(rec.thumb); albumUrls.push(url);
+  const img=cell.querySelector('img'); if(img) img.src=url;
+  const old=cell._url; cell._url=url;
+  if(old){ const i=albumUrls.indexOf(old); if(i>-1)albumUrls.splice(i,1); try{URL.revokeObjectURL(old)}catch(e){} }
 }
 let lbPhoto=null, lbUrl='';
 function openLightbox(p){
@@ -1297,6 +1376,7 @@ $('#lbSave').addEventListener('click',async()=>{
   loadGeo(); renderSun(); renderScenes(); renderFilm(); renderAlbum(); renderGenBar(); renderQueuePanel();
   if(geo.lat!=null) renderSun();
   ensurePersist();   // 照片都在 IndexedDB，能申请持久存储就申请
+  backfillThumbs();  // 历史照片后台补缩略图（老记录没有 thumb 字段）
   // 队列持久化恢复：未完成（排队中/被刷新打断）自动继续调度；已完成的不重复入队
   try{
     const c=GenQueue.restore(await DB.tasks());
