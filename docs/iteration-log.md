@@ -10,6 +10,10 @@
 
 ## v0.7 — 2026-09-22（工程化迁移：React 19 + TS + Vite，功能对齐 + 真测试 + 红线 guard）
 
+> 部署形状（2026-09-22 追加）：Pages 源已从「分支提供」切到 **GitHub Actions 发布**（`build_type: workflow`）。
+> 站点形状由 `scripts/assemble-site.mjs` 统一定义（`/` 根原型、`/docs` `/tools`、`/web/` 构建入口 + dist），
+> `web/dist` 不再提交；推送 main 即触发构建 + 门禁（53 单测 / 61 guard，含子路径部署冒烟）后发布。
+
 ### 背景
 
 原型单文件已到 74 KB / 1388 行，队列、缩略图、相机取图、拍立得、修图全挤在一个 `<script>` 里：
@@ -101,7 +105,7 @@ guard 的「子路径部署冒烟」会按 Pages 的目录形状（仓库根）�
 
 | # | 问题 | 影响 | 计划 |
 |---|------|------|------|
-| K19 | **`web/dist` 必须提交进仓库**：Pages 目前从分支直接提供、没有 CI，不提交产物线上就拿不到新版本 | 每次改前端都要 build 一次并把产物一起提交，产物 diff 进 git 历史 | 把 Pages 源切成 GitHub Actions（build → upload-pages-artifact）后，即可在 `web/.gitignore` 里加上 `dist/`。权衡已写在 `web/README.md` |
+| K19 | ~~`web/dist` 必须提交进仓库~~ **已解决（2026-09-22）**：Pages 已切到 GitHub Actions 发布（`build_type: workflow`），`web/dist` 不再提交、由 CI 构建 | 无（产物 diff 不再进 git 历史） | 已解决。管线：`.github/workflows/deploy-pages.yml`（npm ci → npm test → npm run build → npm run guard → `scripts/assemble-site.mjs` 组装 → upload-pages-artifact → deploy-pages） |
 | K20 | 现在有**两套实现**（根 `index.html` 与 `web/`），同一功能改两边会漂移；只有太阳算法有数值等价性测试守着 | 根原型的后续改动不会自动出现在 web 版（反之亦然） | 功能演进只改 `web/`（有测试 + guard），根原型冻结；若必须两边同改，先改 `web/` 再同步并跑 `npm run verify` |
 | K21 | 旧验收脚本（`snapsaga_queue_check/*.cjs`、`ss_e2e.cjs`）依赖页面全局（`PHOTOS`/`DB`/`GenQueue`/`cam`…），新应用靠 `src/debug/bridge.ts` 提供只读兼容层才能跑 | 删掉 bridge 就会让那批脚本失效（`web/e2e/` 已内化同样断言，不受影响） | 保留 bridge（零成本、便于线上排查）；新验收一律写在 `web/e2e/` |
 | K23 | **PWA 的 SW scope 是 `/web/dist/`**（sw.js 就在产物目录里），所以安装到主屏后的 `start_url`（由 manifest 相对解析）落在 scope 内、离线可用；而 `/web/` 那个入口页本身不受 SW 控制（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常） | 离线只覆盖产物目录 | 若要连 `/web/` 一起离线，需把 sw.js 放到 `web/` 根（即再拆一层构建步骤）；当前安装路径（主屏图标 → `/web/dist/`）已满足离线需求 |

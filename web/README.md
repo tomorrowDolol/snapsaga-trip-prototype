@@ -90,7 +90,7 @@ GitHub Pages 请求目录时只会找 `index.html`，而 Vite 的源入口如果
 | 文件 | 角色 |
 |------|------|
 | `web/app.html` | Vite **源入口**（产物 `dist/app.html`）—— 改界面改这里 |
-| `web/dist/**` | 构建产物（**提交**） |
+| `web/dist/**` | 构建产物（**不再提交**，CI 构建后上传，见下） |
 | `web/index.html` | `npm run build` **生成**的入口页（把引用改写成 `./dist/…`），`…/web/` 就是它（**提交，不要手改**） |
 
 于是 `/web/` 与 `/web/dist/app.html` 都能打开应用；Service Worker 的路径由页面里的
