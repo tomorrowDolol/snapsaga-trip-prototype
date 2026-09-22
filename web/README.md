@@ -134,8 +134,8 @@ npm run verify     # build → test → guard → e2e 一条龙
 | 层 | 工具 | 数量 | 说明 |
 |----|------|------|------|
 | 单测 | Vitest + jsdom | **149** 个测试（10 个文件） | 队列调度（并发峰值 9 / 主题任务占 1 槽位 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）9 · 主题模型（状态机 / 两条上限 9 / 产出条数）22 · 提示词拼装 14 · 拼图布局与合成 27 · 场景插画 18 · 缩略图 14 · 相机取图 16 · AI Base 11 · 太阳算法等价性 3 |
-| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **204** 项 | 主链路 36（并发 9）/ **主题模式 63** / **取景页几何与相机抽屉 65（v0.9 新）** / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
-| 红线 guard | node + Playwright | **111** 项 | 源码侧 67 / 产物侧 25 / 产物运行时 12 / 子路径部署冒烟 7 |
+| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **206** 项 | 主链路 36（并发 9）/ **主题模式 63** / **取景页几何与相机抽屉 67（v0.9 新）** / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
+| 红线 guard | node + Playwright | **112** 项 | 源码侧 68 / 产物侧 25 / 产物运行时 12 / 子路径部署冒烟 7 |
 | 构建 | tsc（严格）+ vite | — | `npm run build` 零错误 |
 
 主题模式专项 e2e（`e2e/acceptance-theme-mode.e2e.mjs`，63 项）四个场景：
@@ -148,7 +148,7 @@ npm run verify     # build → test → guard → e2e 一条龙
    取消一张后可以继续选。
 4. **并发峰值 9 / 第 10 个任务排队**：10 连拍 → 9 在跑 + 1 排队 + 峰值 9；暗房 9 个显影槽全忙、统计与徽标一致。
 
-取景页几何专项 e2e（`e2e/acceptance-camera-layout.e2e.mjs`，65 项，**在 390×844 与 390×664 两个视口下各跑一遍**）：
+取景页几何专项 e2e（`e2e/acceptance-camera-layout.e2e.mjs`，67 项，**在 390×844 与 390×664 两个视口下各跑一遍**）：
 
 1. **几何**：快门 boundingBox 完整落在视口内且与任何其它可见元素不相交（逐个比较同页元素，排除祖先/后代，
    用「被 overflow 裁剪后的可见矩形」比较）；取景画面高度 ≥ 视口 × 0.6 且被 `object-fit:cover` 的 video 填满；
@@ -159,7 +159,8 @@ npm run verify     # build → test → guard → e2e 一条龙
    抽屉底边 ≤ 底栏顶边（结构上盖不到快门）；**抽屉开着时真的按一下快门**（照片入库、`#camMeta` 语义不变）；
    抽屉里的控件真能用（切 50 mm → 预览缩放 + 左下角小字跟着变、切场景相机、胶片 chips 存在）。
 4. **轻量浮层**：构图提示是绝对定位浮层 + 单行（≤ 32 px）+ 4 s 内 opacity → 0 + 点取景画面恢复；
-   取景页 AppHeader 隐藏但 `header .sub` 版本号仍可读、六个 tab 不变。
+   取景页 AppHeader 隐藏但 `header .sub` 版本号仍可读、六个 tab 不变；**连 toast 也不压快门**
+   （取景页 toast 抬到底栏之上，真触发一次再跑一遍重叠检查）。
 
 截图（人工确认「画面干净、快门明显、构图无遮挡」，产物不入库）：`e2e/artifacts/camera-<视口>-sheet-<closed|open>.png`。
 

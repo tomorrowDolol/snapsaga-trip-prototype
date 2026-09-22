@@ -32,6 +32,12 @@ export function App() {
     return () => clearInterval(t);
   }, [renderSun]);
 
+  // 取景页时给 body 挂一个标记：toast 要抬高到底栏之上（快门是主角，不能被反馈气泡压住）
+  useEffect(() => {
+    document.body.classList.toggle('view-cam', view === 'cam');
+    return () => document.body.classList.remove('view-cam');
+  }, [view]);
+
   return (
     <>
       <AppHeader />

@@ -274,6 +274,16 @@ async function viewportPass(w, h) {
     check(`[${tag}] 抽屉里能切场景相机`, (await page.evaluate(() => document.querySelector('#camSheet .sk.on').dataset.i)) === '4');
     check(`[${tag}] 抽屉里有胶片与风格 chips（#genBar / #genStyles）`, (await page.$$eval('#camSheet #genStyles .gen-chip', (e) => e.length)) > 0);
 
+    // 连 toast 也不许压住快门（toast 是 fixed 浮层，取景页里要抬到底栏之上）
+    await page.click('#camSheet #btnFlash');
+    await sleep(200);
+    const withToast = await page.evaluate(PROBE);
+    const toastShown = await page.evaluate(() => {
+      const t = document.querySelector('#toast');
+      return { show: t.classList.contains('show'), opacity: Number(getComputedStyle(t).opacity), bottom: +t.getBoundingClientRect().bottom.toFixed(1) };
+    });
+    check(`[${tag}] 取景页的 toast 浮在底栏之上（不压快门）`, toastShown.show && toastShown.opacity === 1 && toastShown.bottom <= withToast.dock.y + 0.5 && withToast.overlapping.length === 0, `${JSON.stringify(toastShown)} dockTop=${withToast.dock.y} overlap=${withToast.overlapping.join('|') || '无'}`);
+
     // 点遮罩关闭
     await page.evaluate(() => document.querySelector('#camSheetMask').click());
     await sleep(400);

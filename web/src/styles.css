@@ -534,6 +534,9 @@ input[type=range]{flex:1; accent-color:var(--gold)}
   padding:10px 15px; border-radius:12px; opacity:0; pointer-events:none; transition:.22s; max-width:84vw; text-align:center;
 }
 #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+/* 取景页：底栏（最近拍摄 + 快门行）比 tab 栏高得多，toast 要抬到它上面，别压住快门。
+   （底栏与 tab 栏各自带一次 safe-area，所以这里乘 2。） */
+body.view-cam #toast{bottom:calc(env(safe-area-inset-bottom) * 2 + 212px)}
 
 /* 底部导航 */
 nav.bottom{

@@ -138,6 +138,10 @@ check(
 check('相机抽屉是取景画面内的绝对定位层（不会盖住底栏）', /#camSheet\{[^}]*position:absolute/.test(stylesSrc));
 check('抽屉支持下拉关闭（把手上有指针手势）', /onPointerDown/.test(cameraSheetSrc) && /setPointerCapture/.test(cameraSheetSrc));
 check('调试桥暴露相机抽屉开关（e2e 需要先开抽屉再点里面的元素）', /openCameraSheet/.test(bridgeSrc) && /closeCameraSheet/.test(bridgeSrc));
+check(
+  '取景页的 toast 抬到底栏之上（连反馈气泡也不许压快门）',
+  /body\.view-cam #toast\{/.test(stylesSrc) && /classList\.toggle\('view-cam'/.test(srcText('App.tsx')),
+);
 
 // 缩略图规格
 check('缩略图最长边 = 320', /THUMB_MAX = 320/.test(thumbsSrc));
