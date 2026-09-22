@@ -8,16 +8,17 @@
 | 内容 | 位置 |
 |------|------|
 | 📱 **出行原型（单文件，v0.6 冻结）** | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/> |
-| ⚛️ **工程化版本（React + TS，v0.7）** | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> · 说明见 [web/README.md](web/README.md) |
+| ⚛️ **工程化版本（React + TS，v0.8）** | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> · 说明见 [web/README.md](web/README.md) |
 | 📊 **当前状态 / 活跃问题 / 版本摘要（先读这个）** | [docs/iteration-log.md](docs/iteration-log.md) |
-| 🗄 迭代历史归档（v0.1–v0.7 明细、实测数字） | [docs/iteration-history.md](docs/iteration-history.md) |
+| 🗄 迭代历史归档（v0.1–v0.8 明细、实测数字） | [docs/iteration-history.md](docs/iteration-history.md) |
 | 🎨 产品设计稿（交互 HTML，可在线打开） | [docs/design-v0.1.html](docs/design-v0.1.html) · [在线版](https://tomorrowdolol.github.io/snapsaga-trip-prototype/docs/design-v0.1.html) |
 | 🗓 P0 落地计划（8 周 WBS / 验收门槛 / 风险） | [docs/p0-plan.md](docs/p0-plan.md) |
 | 🤖 AI 代理工作指南（改代码前先读） | [AGENTS.md](AGENTS.md) |
 
-> 当前原型 v0.6（单文件）：拍照与 AI 生图解耦——按快门只存胶卷，生图进后台队列（最多 4 并发，先入先跑），
-> 完成后归档到「AI 相册」。v0.7 起同一套功能另有工程化版本 `web/`（React 19 + TypeScript + Vite），
-> **两者同源同库**：同一个 IndexedDB、同一批 localStorage 键，数据直接复用。
+> 当前原型 v0.6（单文件）：拍照与 AI 生图解耦——按快门只存胶卷，生图进后台队列，完成后归档到「AI 相册」。
+> v0.7 起同一套功能另有工程化版本 `web/`（React 19 + TypeScript + Vite），v0.8 起 `web/` **以「主题模式」为中心**
+> （写一句主题 → 选 2–9 张图 → 合成一张 / 统一风格；统一风格可「边拍边收」），并发上限按设计稿提到 **9**。
+> **两者同源同库**：同一个 IndexedDB（`snapsaga` 仍是 v2，主题记录另存 `snapsaga_themes`）、同一批 localStorage 键，数据直接复用。
 
 ## 文档地图
 
@@ -28,7 +29,7 @@
 | [AGENTS.md](AGENTS.md) | **AI 代理的操作契约**：铁律 + 标准改动流程（改代码前先完整读） |
 | [README.md](README.md) | 本文件：总览、线上入口、目录结构、**部署形状（单一真源）**、本地验证、正式版路线 |
 | [docs/iteration-log.md](docs/iteration-log.md) | 面向迭代的**首屏**：当前状态 + 活跃已知问题 + 设计内取舍 + 版本摘要 + 下一版候选 |
-| [docs/iteration-history.md](docs/iteration-history.md) | **归档**：v0.1–v0.7 详细验证记录、实测数字表、已解决 K 条目原文 |
+| [docs/iteration-history.md](docs/iteration-history.md) | **归档**：v0.1–v0.8 详细验证记录、实测数字表、已解决 K 条目原文 |
 | [docs/p0-plan.md](docs/p0-plan.md) | **工程路线真源**：P0 8 周计划、技术决策 D1–D5、里程碑 Gate、风险登记簿 |
 | [docs/design-v0.1.html](docs/design-v0.1.html) | **产品功能定义真源**：定位 / 四大模块 / 架构 / Prompt 策略 / 路线图 |
 | [web/README.md](web/README.md) | 工程化版专属：目录、命令、数据兼容（键名/库名）、验证矩阵、未覆盖项 |
@@ -37,7 +38,7 @@
 
 ```
 ├── index.html            # 出行原型 v0.6（单文件应用，无构建、无依赖）
-├── web/                  # 工程化版本 v0.7（React 19 + TS 严格 + Vite + Tailwind + Zustand）
+├── web/                  # 工程化版本 v0.8（React 19 + TS 严格 + Vite + Tailwind + Zustand）
 │   ├── app.html          # Vite 源入口（改界面改它）
 │   ├── index.html        # 构建生成的入口页（不要手改；Pages 的 /web/ 就是它）
 │   ├── src/              # domain（纯逻辑）/ data（IndexedDB）/ store / components / debug / test
@@ -50,7 +51,7 @@
 │   ├── design-v0.1.html      # 产品设计稿（功能定义真源）
 │   ├── p0-plan.md            # P0 落地计划（工程路线真源）
 │   ├── iteration-log.md      # 当前状态 / 活跃问题 / 版本摘要（首屏）
-│   └── iteration-history.md  # 迭代历史归档（v0.1–v0.7 明细）
+│   └── iteration-history.md  # 迭代历史归档（v0.1–v0.8 明细）
 ├── scripts/
 │   ├── assemble-site.mjs     # 组装要发布的站点目录（CI 与本地同一份逻辑）
 │   └── check-docs.mjs        # 文档防腐烂检查（链接 / K 编号 / 文档地图 / 版本号）
@@ -78,6 +79,7 @@ npm ci → npm test（53 项）→ npm run build → 装 Playwright Chromium →
 | 线上路径 | 来源 | 说明 |
 |----------|------|------|
 | `/` | 根 `index.html` | 单文件原型，冻结在 v0.6 |
+| `/web/` 的功能面 | `web/dist/**` | v0.8 起以「主题模式」为中心：主题（两种产出 / 边拍边收）· 暗房（并发 9）· 相册三分组 |
 | `/docs/` `/tools/` | 同目录 | 文档与工具页（含 `ios-probe.html`） |
 | `/web/` | `web/index.html` + `web/dist/**` | React 版（入口页与产物都由 `npm run build` 生成） |
 
@@ -98,7 +100,7 @@ node scripts/check-docs.mjs        # 内部链接 / K 编号 / 文档地图 / �
 # —— 单文件原型（根 index.html）——
 python3 -c "..."                  # 1. HTML 标签闭合（html.parser）
 # 2. 抽出全部 <script> 跑 node --check
-node tools/check_gen_queue.mjs    # 3. 生图队列：并发 4 / FIFO / 失败重试 / 刷新恢复 / 归档
+node tools/check_gen_queue.mjs    # 3. 生图队列：FIFO / 失败重试 / 刷新恢复 / 归档（根原型单文件版仍是并发 4）
 
 # —— 工程化版本（web/）——
 cd web

@@ -5,7 +5,10 @@
  * 「python3 静态服务 + require 全局 playwright」换成仓库内零依赖实现，并对准 React 构建产物
  * （web/dist）。相机与 AI 接口的 stub 方式与原脚本一致。
  *
- * 覆盖：快门不阻塞 / 队列并发 4 + 排队 / 刷新恢复续跑 / 失败重试 / 归档 AI 相册 / objectURL 有界 / 清空数据。
+ * 覆盖：快门不阻塞 / 队列并发 9 + 排队 / 刷新恢复续跑 / 失败重试 / 归档 AI 相册 / objectURL 有界 / 清空数据。
+ *
+ * v0.8 唯一的结构性改动：并发上限按设计稿从 4 改为 9（队列、guard、文档同步改），
+ * 所以 [1] 的连拍数从 6 提到 10（10 张才能观察到「9 个在跑 + 1 个排队」）。断言本身没有放松。
  * 跑法：npm run build && node e2e/acceptance-main-chain.e2e.mjs
  */
 import { fileURLToPath } from 'node:url';
@@ -163,7 +166,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#video').videoWidth > 0, null, { timeout: 8000 });
   check('相机 stub 就绪（videoWidth > 0）', true, 'videoWidth=' + (await page.$eval('#video', (v) => v.videoWidth)));
 
-  console.log('\n[1] 快门不被生图阻塞 + 队列并发上限 4');
+  console.log('\n[1] 快门不被生图阻塞 + 队列并发上限 9');
   await page.evaluate(() => {
     window.__genDelay = 4000;
     localStorage.setItem('ss_e2e_delay', '4000');
@@ -175,24 +178,26 @@ try {
   });
   check('点击快门同步返回（不 await AI）', tClick < 50, `${tClick.toFixed(1)} ms`);
   await page.waitForTimeout(250);
-  await shot(5, 150);
+  await shot(9, 150); // 1 + 9 = 10 张：第 10 个任务起排队（并发上限 9）
   await page.waitForTimeout(600);
   await page.click('#btnQueue');
   await page.waitForTimeout(200);
   const snap = await items();
   const running = snap.filter((x) => x.status === 'running').length;
   const queued = snap.filter((x) => x.status === 'queued').length;
-  check('胶卷已有 6 张原片', (await cells('#filmGrid .film-cell')) === 6, `实际 ${await cells('#filmGrid .film-cell')}`);
-  check('队列面板列出 6 条任务', snap.length === 6, `实际 ${snap.length}`);
-  check('同时生成中 = 4（并发上限）', running === 4, `running=${running}`);
-  check('其余 2 条在排队', queued === 2, `queued=${queued}`);
-  check('徽标显示待处理数量 6', (await badge()) === '6', await badge());
-  check('页面侧 AI 并发峰值 = 4', (await page.evaluate(() => window.__aiPeak)) === 4, 'peak=' + (await page.evaluate(() => window.__aiPeak)));
+  check('胶卷已有 10 张原片', (await cells('#filmGrid .film-cell')) === 10, `实际 ${await cells('#filmGrid .film-cell')}`);
+  check('队列面板列出 10 条任务', snap.length === 10, `实际 ${snap.length}`);
+  check('同时生成中 = 9（并发上限）', running === 9, `running=${running}`);
+  check('其余 1 条在排队（第 10 个任务起排队）', queued === 1, `queued=${queued}`);
+  // 徽标按设计稿封顶到「9+」（>9 就不再显示具体数字），待处理数量的真值看队列本身
+  check('徽标显示 9+（待处理 10 超过徽标封顶口径）', (await badge()) === '9+', await badge());
+  check('页面侧 AI 并发峰值 = 9', (await page.evaluate(() => window.__aiPeak)) === 9, 'peak=' + (await page.evaluate(() => window.__aiPeak)));
   check(
     '排队条目显示队列位次',
-    snap.some((x) => x.text.includes('第 1 位')) && snap.some((x) => x.text.includes('第 2 位')),
+    snap.some((x) => x.text.includes('第 1 位')),
     snap.filter((x) => x.status === 'queued').map((x) => x.text).join(' / '),
   );
+  check('暗房显影槽占满 9 个（并发上限 9）', (await cells('#slots .sl.busy')) === 9, `实际 ${await cells('#slots .sl.busy')}`);
   check('胶卷里没有 AI 结果（AI 独立归档）', (await cells('#albumGrid .film-cell')) === 0);
 
   await page.evaluate(() => {
@@ -206,14 +211,14 @@ try {
   );
   await page.waitForTimeout(300);
   const after = await items();
-  check('6 条任务全部完成', after.filter((x) => x.status === 'done').length === 6, after.map((x) => x.status).join(','));
+  check('10 条任务全部完成', after.filter((x) => x.status === 'done').length === 10, after.map((x) => x.status).join(','));
   check('徽标隐藏（无待处理）', (await page.evaluate(() => document.querySelector('#queueBadge').classList.contains('show'))) === false);
   await closePanel();
   await page.click('nav.bottom button[data-v="album"]');
   await page.waitForTimeout(300);
-  check('AI 相册归档 6 张', (await cells('#albumGrid .film-cell')) === 6, `实际 ${await cells('#albumGrid .film-cell')}`);
-  check('胶卷仍是 6 张原片（没有被 AI 结果污染）', (await cells('#filmGrid .film-cell')) === 6, `实际 ${await cells('#filmGrid .film-cell')}`);
-  check('AI 调用次数 = 6（没有重复生成）', (await page.evaluate(() => window.__aiCalls)) === 6, 'calls=' + (await page.evaluate(() => window.__aiCalls)));
+  check('AI 相册归档 10 张', (await cells('#albumGrid .film-cell')) === 10, `实际 ${await cells('#albumGrid .film-cell')}`);
+  check('胶卷仍是 10 张原片（没有被 AI 结果污染）', (await cells('#filmGrid .film-cell')) === 10, `实际 ${await cells('#filmGrid .film-cell')}`);
+  check('AI 调用次数 = 10（没有重复生成）', (await page.evaluate(() => window.__aiCalls)) === 10, 'calls=' + (await page.evaluate(() => window.__aiCalls)));
 
   console.log('\n[2] 相册查看 + 大图');
   await page.click('#albumGrid .film-cell');
@@ -248,8 +253,8 @@ try {
   const restoredDone = restored.filter((x) => x.status === 'done').length;
   const restoredPending = restored.filter((x) => x.status === 'running' || x.status === 'queued').length;
   check(
-    '刷新后从未完成的任务里恢复出 3 条（历史 6 条 done 也在列表里）',
-    restoredPending === 3 && restoredDone === 6,
+    '刷新后从未完成的任务里恢复出 3 条（历史 10 条 done 也在列表里）',
+    restoredPending === 3 && restoredDone === 10,
     `pending=${restoredPending} done=${restoredDone} 共 ${restored.length}`,
   );
   check('恢复的任务自动继续调度（3 个都在跑）', restored.filter((x) => x.status === 'running').length === 3, restored.map((x) => x.status).join(','));
@@ -268,8 +273,8 @@ try {
     document.querySelector('#btnQueueToAlbum').click();
   });
   await page.waitForTimeout(300);
-  check('恢复的任务全部完成并归档（相册 6 → 9）', (await cells('#albumGrid .film-cell')) === 9, `相册 ${await cells('#albumGrid .film-cell')}`);
-  check('刷新没有让原片丢失（胶卷 6 → 9）', (await cells('#filmGrid .film-cell')) === 9, `实际 ${await cells('#filmGrid .film-cell')}`);
+  check('恢复的任务全部完成并归档（相册 10 → 13）', (await cells('#albumGrid .film-cell')) === 13, `相册 ${await cells('#albumGrid .film-cell')}`);
+  check('刷新没有让原片丢失（胶卷 10 → 13）', (await cells('#filmGrid .film-cell')) === 13, `实际 ${await cells('#filmGrid .film-cell')}`);
 
   console.log('\n[4] 失败不卡队列 + 单独重试');
   await page.click('nav.bottom button[data-v="cam"]');
@@ -318,7 +323,16 @@ try {
   }
   const u1 = await page.evaluate(() => window.__urlStats);
   const delta = u1.created - u1.revoked;
-  check('objectURL 没有随重渲染无限增长（活跃数有界）', delta <= 60, `created=${u1.created} revoked=${u1.revoked} 活跃 ${delta}`);
+  // 活跃 URL 应当被「当前挂载着的图片元素数」兜住：多出来的就是没回收的。
+  // （阈值改成这个不变量比写死 60 更严：界面同时挂载的图变多时，写死数字会误报。）
+  const mounted = await page.evaluate(
+    () => [...document.querySelectorAll('img')].filter((i) => (i.src || '').startsWith('blob:')).length,
+  );
+  check(
+    '活跃 objectURL 不超过挂载中的图片数（没有随重渲染累积）',
+    delta <= mounted + 5,
+    `created=${u1.created} revoked=${u1.revoked} 活跃 ${delta} / 挂载图片 ${mounted}`,
+  );
   // 原型用「批次换 URL」策略，所以 revoke 次数会接近 create；React 版把 URL 生命周期绑到元素上
   // （挂载期间复用同一个 URL，卸载才 revoke），因此这里改断言底层不变量：重渲染不制造 URL 抖动。
   check(

@@ -1,6 +1,6 @@
 /** 8 个场景卡与构图提示（文案与根目录原型逐字一致） */
 
-export type GridMode = 'thirds' | 'spiral';
+export type GridMode = 'thirds' | 'spiral' | 'off';
 
 export interface Scene {
   k: string;

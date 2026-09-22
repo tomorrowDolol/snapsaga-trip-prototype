@@ -7,6 +7,7 @@
  */
 import { create } from 'zustand';
 import { db } from '../data/db';
+import { themesDb } from '../data/themesDb';
 import { queue, installQueueHooks } from './queueRuntime';
 import { cam, currentStream, ensurePersistOnce, openStream, tuneCamera, shutterShot } from './cameraRuntime';
 import type { QueueCounts } from '../domain/genQueue';
@@ -18,9 +19,28 @@ import { aiCreds, aiBaseSetting, genAutoSetting, loadGeo, saveAiSettings, saveGe
 import { sunTimes } from '../domain/sun';
 import { fmtTime, saveOrShare, canvasToBlob } from '../domain/media';
 import { aiRedrawCore, humanAiErr } from '../domain/aiRedraw';
-import type { PhotoRec, QueueTask } from '../domain/types';
+import type { PhotoRec, QueueTask, ThemeMode, ThemeRec } from '../domain/types';
+import type { CollageLayout } from '../domain/collage';
+import {
+  addSource,
+  applyThemeEvent,
+  canGenerate,
+  collectSubTaskSources,
+  expectedOutputs,
+  newTheme,
+  pickAllIds,
+  resetForRegen,
+  syncThemeStatus,
+  themeById,
+  togglePick,
+  THEME_MAX_SOURCES,
+} from '../domain/themes';
+import { buildPrompt, ideaAt, surpriseWords, toggleWord } from '../domain/promptBuilder';
 
-export type View = 'cam' | 'film' | 'pola' | 'edit' | 'album';
+export type View = 'cam' | 'theme' | 'film' | 'dark' | 'pola' | 'edit' | 'album';
+
+/** 相册分组：原始胶卷 / AI 归档 / 主题作品（主题作品里再分合成作品与同风格组） */
+export type AlbumGroup = 'raw' | 'ai' | 'theme';
 
 export interface AppState {
   initialized: boolean;
@@ -74,6 +94,25 @@ export interface AppState {
   toast: string | null;
   /** 非安全上下文横幅 */
   insecure: boolean;
+  // ---------------- 主题模式 ----------------
+  /** 全部主题（独立库 snapsaga_themes，只存 id 引用） */
+  themes: ThemeRec[];
+  /** 正在「边拍边收」的主题 id（取景页顶部主题条用它） */
+  activeThemeId: string | null;
+  /** 新建主题面板是否展开 */
+  themeCreateOpen: boolean;
+  /** 主题详情面板 */
+  themeDetailId: string | null;
+  /** 新建面板表单镜像 */
+  themePromptDraft: string;
+  themeWords: string[];
+  themeMode: ThemeMode;
+  themeLayout: CollageLayout;
+  themeStrength: number;
+  /** 已选素材（≤ 9） */
+  themePick: string[];
+  /** 相册分组 */
+  albumGroup: AlbumGroup;
 }
 
 export interface AppActions {
@@ -88,6 +127,8 @@ export interface AppActions {
   syncCam(): void;
   // 场景 / 水平仪
   setScene(i: number): void;
+  /** 构图网格：三分 → 黄金螺旋 → 关（取景 HUD 的 ▦ 按钮循环） */
+  setGridMode(m: GridMode): void;
   toggleLevel(): Promise<void>;
   setLevelDeviation(deg: number | null): void;
   // 胶卷
@@ -131,6 +172,31 @@ export interface AppActions {
   enableSun(): void;
   renderSun(): void;
   wipeAll(): Promise<void>;
+  // ---------------- 主题模式 ----------------
+  openThemeCreate(withPick?: boolean): void;
+  closeThemeCreate(): void;
+  setThemePrompt(v: string): void;
+  toggleThemeWord(w: string): void;
+  clearThemeDraft(): void;
+  surpriseThemeDraft(): void;
+  useIdea(i: number): void;
+  setThemeMode(m: ThemeMode): void;
+  setThemeLayout(l: CollageLayout): void;
+  setThemeStrength(v: number): void;
+  toggleThemePick(id: string): void;
+  themePickAll(): void;
+  /** 创建主题（shootMode=true = 创建并开拍 → 边拍边收） */
+  createTheme(shootMode?: boolean): void;
+  openThemeDetail(id: string): void;
+  closeThemeDetail(): void;
+  regenTheme(id: string): void;
+  resumeTheme(id: string): void;
+  endActiveTheme(): void;
+  saveThemeToAlbum(id: string): void;
+  reuseThemePrompt(id: string): void;
+  setAlbumGroup(g: AlbumGroup): void;
+  /** 边拍边收：把刚拍的一张同步收进主题（**同步**，快门路径不许 await 它） */
+  collectIntoActiveTheme(rec: PhotoRec): boolean;
 }
 
 export type AppStore = AppState & AppActions;
@@ -219,6 +285,17 @@ export const useAppStore = create<AppStore>()((set, get) => {
     sunDetail: '使用定位或手动填经纬度（设置里）',
     toast: null,
     insecure: typeof window !== 'undefined' && !window.isSecureContext,
+    themes: [],
+    activeThemeId: null,
+    themeCreateOpen: false,
+    themeDetailId: null,
+    themePromptDraft: '',
+    themeWords: [],
+    themeMode: 'merge',
+    themeLayout: '网格拼贴',
+    themeStrength: 0.62,
+    themePick: [],
+    albumGroup: 'ai',
 
     showToast,
 
@@ -235,8 +312,16 @@ export const useAppStore = create<AppStore>()((set, get) => {
       get().renderSun();
       ensurePersistOnce();
       backfillThumbs();
+      // 主题：独立库（见 data/themesDb.ts 的说明）；加载后让状态跟随恢复出来的队列
+      try {
+        await themesDb.open();
+        set({ themes: await themesDb.all() });
+      } catch {
+        /* 主题库打不开不阻塞启动 */
+      }
       try {
         const c = queue.restore(await db.tasks());
+        syncThemesFromQueue();
         if (c.run + c.queued) showToast(`已恢复后台生图队列：生成中 ${c.run} · 排队 ${c.queued}`, 3200);
       } catch {
         /* 队列恢复失败不阻塞应用启动 */
@@ -302,9 +387,11 @@ export const useAppStore = create<AppStore>()((set, get) => {
       cam.lastShot = shot.kind;
       get().syncCam();
       const rec = await get().addPhoto(shot.blob, shot.kind);
+      // 主题生效中：这张归主题（同步收图 + 同步入队，依然不 await 任何东西）
+      if (get().collectIntoActiveTheme(rec)) return;
       const creds = aiCreds();
       if (get().genAuto && creds.base && creds.key) {
-        queue.add(rec, styleByKey(get().genStyleKey), GEN_STRENGTH); // 同步入队，立即返回；后台最多 4 并发
+        queue.add(rec, styleByKey(get().genStyleKey), GEN_STRENGTH); // 同步入队，立即返回；后台最多 9 并发
         showToast('已存胶卷 🎞 · 已加入生图队列');
       } else if (get().genAuto) {
         showToast('已收进胶卷 🎞 · 未配置 AI（设置里填 Base/Key），这张没入队');
@@ -316,6 +403,9 @@ export const useAppStore = create<AppStore>()((set, get) => {
     // ---------------- 场景 / 水平仪 ----------------
     setScene(i) {
       set({ sceneIdx: i, gridMode: SCENES[i].grid });
+    },
+    setGridMode(m) {
+      set({ gridMode: m });
     },
 
     async toggleLevel() {
@@ -584,6 +674,7 @@ export const useAppStore = create<AppStore>()((set, get) => {
     async wipeAll() {
       await db.clear();
       await db.putTasks([]);
+      await themesDb.clear();
       queue.reset(); // 队列与在飞的生成结果一起作废
       localStorage.clear();
       // 注意：不碰相机流 —— 原型「清空数据」后相机仍可用，可以继续拍（只是没 Key 不再入队）
@@ -601,11 +692,249 @@ export const useAppStore = create<AppStore>()((set, get) => {
         aiKeyInput: '',
         aiModelInput: AI_MODEL_DEFAULT,
         settingsOpen: false,
+        themes: [],
+        activeThemeId: null,
+        themeCreateOpen: false,
+        themeDetailId: null,
+        themePromptDraft: '',
+        themeWords: [],
+        themePick: [],
+        albumGroup: 'ai',
       });
       showToast('已清空');
     },
+
+    // ---------------- 主题模式 ----------------
+    openThemeCreate(withPick) {
+      const s = get();
+      // 「用这些照片建主题」：优先用胶卷里选中的，没选就带最近 4 张（设计稿口径）
+      const picked = s.selected.length
+        ? s.selected.slice(0, THEME_MAX_SOURCES)
+        : s.photos.slice(0, 4).map((p) => p.id);
+      set({
+        themeCreateOpen: true,
+        themeDetailId: null,
+        themePromptDraft: '',
+        themeWords: [],
+        themePick: withPick ? picked : [],
+      });
+    },
+    closeThemeCreate() {
+      set({ themeCreateOpen: false });
+    },
+    setThemePrompt(v) {
+      set({ themePromptDraft: v });
+    },
+    toggleThemeWord(w) {
+      set((s) => ({ themeWords: toggleWord(s.themeWords, w) }));
+    },
+    clearThemeDraft() {
+      set({ themePromptDraft: '', themeWords: [] });
+    },
+    surpriseThemeDraft() {
+      set({ themeWords: surpriseWords() });
+      showToast('换了一批灵感词');
+    },
+    useIdea(i) {
+      set({ themeCreateOpen: true, themePromptDraft: ideaAt(i), themeWords: [] });
+    },
+    setThemeMode(m) {
+      set({ themeMode: m });
+    },
+    setThemeLayout(l) {
+      set({ themeLayout: l });
+      showToast('合成布局：' + l);
+    },
+    setThemeStrength(v) {
+      set({ themeStrength: Math.min(1, Math.max(0, v)) });
+    },
+    toggleThemePick(id) {
+      const r = togglePick(get().themePick, id);
+      if (!r.accepted) {
+        showToast(r.reason, 2600);
+        return;
+      }
+      set({ themePick: r.pick });
+    },
+    themePickAll() {
+      const s = get();
+      const ids = s.photos.map((p) => p.id);
+      const next = pickAllIds(ids, s.themePick.length);
+      set({ themePick: next });
+      if (next.length >= THEME_MAX_SOURCES) showToast(`已选满 ${THEME_MAX_SOURCES} 张（多图上限）`, 2600);
+    },
+
+    createTheme(shootMode) {
+      const s = get();
+      const prompt = buildPrompt(s.themePromptDraft, s.themeWords);
+      const ids = s.themePick.filter((id) => s.photos.some((p) => p.id === id));
+      const theme = newTheme({
+        id: 'th' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        prompt,
+        words: s.themeWords,
+        mode: s.themeMode,
+        layout: s.themeLayout,
+        strength: s.themeStrength,
+        sourceIds: ids,
+      });
+      if (!canGenerate(ids.length)) {
+        if (!shootMode) {
+          showToast(`选 2–${THEME_MAX_SOURCES} 张照片才能生成`, 2600);
+          return;
+        }
+      }
+      const created = applyThemeEvent(theme, 'collect-start');
+      const first: ThemeRec = shootMode ? { ...created, collecting: true } : theme;
+      set({ themes: [first, ...s.themes], themeCreateOpen: false, themePick: [], themePromptDraft: '', themeWords: [] });
+      persistThemes([first, ...s.themes]);
+
+      if (shootMode) {
+        // 边拍边收：主题立即生效，快门自动收图；已选中的先跑一轮
+        if (canGenerate(ids.length)) enqueueTheme(first, ids);
+        set({ activeThemeId: first.id, view: 'cam' });
+        showToast(`主题已启用「${first.name}」· 按快门就自动收进这个主题`, 3200);
+        return;
+      }
+      enqueueTheme(first, ids);
+      set({ view: 'dark' });
+      showToast(`已加入暗房：${first.mode === 'merge' ? '合成一张' : '统一风格'} · ${ids.length} 张 → 产出 ${expectedOutputs(first.mode, ids.length)} 张`, 3200);
+    },
+
+    openThemeDetail(id) {
+      set({ themeDetailId: id, themeCreateOpen: false });
+    },
+    closeThemeDetail() {
+      set({ themeDetailId: null });
+    },
+    regenTheme(id) {
+      const t = themeById(get().themes, id);
+      if (!t) return;
+      const next = resetForRegen(t);
+      patchTheme(next);
+      enqueueTheme(next, next.sourceIds);
+      set({ themeDetailId: null, view: 'dark' });
+      showToast('已重新排队：' + t.name);
+    },
+    resumeTheme(id) {
+      const t = themeById(get().themes, id);
+      if (!t) return;
+      const next = applyThemeEvent(t, 'collect-start');
+      patchTheme(next);
+      set({ activeThemeId: next.id, themeDetailId: null, view: 'cam' });
+      showToast(`继续用「${next.name}」拍，快门自动收图`, 3200);
+    },
+    endActiveTheme() {
+      const s = get();
+      const t = themeById(s.themes, s.activeThemeId);
+      if (!t) {
+        set({ activeThemeId: null });
+        return;
+      }
+      const next = applyThemeEvent(t, 'collect-end');
+      patchTheme(next);
+      set({ activeThemeId: null, view: 'dark' });
+      showToast(`主题「${next.name}」已结束 · 共收 ${next.sourceIds.length} 张，去暗房看成片`, 3200);
+    },
+    saveThemeToAlbum(id) {
+      const t = themeById(get().themes, id);
+      if (!t) return;
+      set({ themeDetailId: null, albumGroup: 'theme', view: 'album' });
+      showToast(`已保存到相册「主题作品」· ${t.outputIds.length} 张`, 2600);
+    },
+    reuseThemePrompt(id) {
+      const t = themeById(get().themes, id);
+      if (!t) return;
+      set({
+        themeDetailId: null,
+        themeCreateOpen: true,
+        themePromptDraft: t.prompt,
+        themeWords: t.words,
+        themeMode: t.mode,
+        themeLayout: t.layout,
+        themeStrength: t.strength,
+        themePick: t.sourceIds.slice(0, THEME_MAX_SOURCES),
+      });
+      showToast('提示词与参数已复制到新建面板', 2600);
+    },
+    setAlbumGroup(g) {
+      set({ albumGroup: g });
+    },
+
+    /** 边拍边收：**同步**把这张收进主题（快门路径调用，绝不允许 await 它） */
+    collectIntoActiveTheme(rec) {
+      const s = get();
+      const t = themeById(s.themes, s.activeThemeId);
+      if (!t || !t.collecting) return false;
+      const r = addSource(t, rec.id);
+      if (!r.accepted) {
+        showToast(r.reason, 3200);
+        return true; // 仍算「归主题」，只是没收进去（已收满）
+      }
+      const withShot = applyThemeEvent(r.theme, 'collect-shot');
+      patchTheme(withShot);
+      queue.addTheme({
+        themeId: withShot.id,
+        themeName: withShot.name,
+        prompt: withShot.prompt,
+        mode: 'unify', // 边拍边收 = 每张各自重绘，同一主题同一调子
+        strength: withShot.strength,
+        sources: collectSubTaskSources(rec.id, rec.blob),
+        pid: rec.id,
+      });
+      showToast(`已收进主题「${withShot.name}」· 第 ${withShot.sourceIds.length} 张，正在统一风格`, 2600);
+      return true;
+    },
   };
 });
+
+/* ---------------- 主题模式的小工具（不进 state，避免无意义重渲染） ---------------- */
+
+/** 主题列表整体落库（主题数量小，整表写最简单可靠，与队列仓同一套做法） */
+function persistThemes(list: readonly ThemeRec[]): void {
+  void themesDb.putAll(list);
+}
+
+/** 改一个主题（其余原样），并落库 */
+function patchTheme(next: ThemeRec): void {
+  const list = useAppStore.getState().themes.map((t) => (t.id === next.id ? next : t));
+  useAppStore.setState({ themes: list });
+  persistThemes(list);
+}
+
+/** 把主题的素材入队（一个主题任务 = 一个槽位） */
+function enqueueTheme(t: ThemeRec, sourceIds: readonly string[]): void {
+  const photos = useAppStore.getState().photos;
+  const sources = sourceIds
+    .map((id) => photos.find((p) => p.id === id))
+    .filter((p): p is PhotoRec => !!p)
+    .map((p) => ({ id: p.id, blob: p.blob as Blob | null }));
+  if (!sources.length) return;
+  patchTheme(applyThemeEvent(t, 'submit'));
+  queue.addTheme({
+    themeId: t.id,
+    themeName: t.name,
+    prompt: t.prompt,
+    mode: t.mode,
+    layout: t.layout,
+    strength: t.strength,
+    sources,
+  });
+}
+
+/** 队列变化 → 主题状态跟随（running / queued / done） */
+function syncThemesFromQueue(): void {
+  const s = useAppStore.getState();
+  const items = queue.items;
+  let changed = false;
+  const list = s.themes.map((t) => {
+    const next = syncThemeStatus(t, items);
+    if (next !== t) changed = true;
+    return next;
+  });
+  if (!changed) return;
+  useAppStore.setState({ themes: list });
+  persistThemes(list);
+}
 
 /** 水平仪：gamma 偏差 ≤2° 视为水平（与原型一致） */
 function levelHandler(e: DeviceOrientationEvent): void {
@@ -638,8 +967,39 @@ installQueueHooks({
     });
     useAppStore.getState().showToast('生图完成：' + (rec.styleName || 'AI') + ' ✨ 已归档到 AI 相册', 2600);
   },
+  /** 主题任务每张产出：逐张入库 + 进相册（每张好了就亮）+ 回写主题的 outputIds */
+  async archiveOutput(task, index, out) {
+    const rec: PhotoRec = {
+      id: 'ai' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '_' + index,
+      blob: out,
+      ts: Date.now(),
+      kind: 'ai',
+      from: task.pid || task.sources?.[index]?.id || task.photoId || '',
+      style: task.styleKey || '',
+      styleName: task.themeName || '主题',
+      theme: task.themeId || '',
+      themeName: task.themeName || '',
+      merge: task.mode === 'merge',
+      ids: task.mode === 'merge' ? (task.sources ?? []).map((s) => s.id) : undefined,
+      layout: task.mode === 'merge' ? task.layout : undefined,
+    };
+    await db.put(rec);
+    useAppStore.setState((s) => ({ album: [rec, ...s.album] }));
+    queueThumb(rec, {
+      put: (r) => db.put(r),
+      onReady: (r) => {
+        useAppStore.setState((s) => ({ album: s.album.map((p) => (p.id === r.id ? { ...p, thumb: r.thumb } : p)) }));
+      },
+    });
+    // 产出回写到主题：k/n 进度与「再来一版」都靠它
+    const t = themeById(useAppStore.getState().themes, task.themeId);
+    if (t) patchTheme({ ...t, outputIds: [...t.outputIds, rec.id], updatedAt: Date.now() });
+    const total = task.mode === 'merge' ? 1 : (task.n ?? 1);
+    useAppStore.getState().showToast(`主题产出 ${index + 1}/${total} 张 · 已进相册「主题作品」`, 2200);
+  },
   onChange() {
     useAppStore.setState({ queueItems: queue.items.slice(), queueCounts: queue.counts() });
+    syncThemesFromQueue();
   },
 });
 
@@ -655,4 +1015,48 @@ export function currentEditPhoto(s: AppState): PhotoRec | null {
 }
 export function lightboxPhoto(s: AppState): PhotoRec | null {
   return s.album.find((p) => p.id === s.lightboxId) ?? s.photos.find((p) => p.id === s.lightboxId) ?? null;
+}
+
+/** 正在边拍边收的主题（取景页顶部主题条用它） */
+export function activeTheme(s: AppState): ThemeRec | null {
+  return themeById(s.themes, s.activeThemeId);
+}
+
+/** 详情面板对应的主题 */
+export function detailTheme(s: AppState): ThemeRec | null {
+  return themeById(s.themes, s.themeDetailId);
+}
+
+/* ---------------- 派生列表 ----------------
+ * ⚠️ 这些函数**不能**直接当 zustand selector 用（每次返回新数组会让 v5 的
+ * useSyncExternalStore 无限重渲染，React 报 #185）。用法：先 select 稳定的原始切片，
+ * 再在渲染里算：`const list = albumPhotos({ photos, album, albumGroup })`。 */
+
+export interface PhotoSlices {
+  photos: PhotoRec[];
+  album: PhotoRec[];
+  albumGroup: AlbumGroup;
+}
+
+/** 相册当前分组的照片：raw = 胶卷原片；ai = 全部 AI 归档；theme = 主题作品 */
+export function albumPhotos({ photos, album, albumGroup }: PhotoSlices): PhotoRec[] {
+  if (albumGroup === 'raw') return photos;
+  if (albumGroup === 'theme') return album.filter((p) => !!p.theme);
+  return album;
+}
+
+/** 主题作品再分两组：合成成品（merge）与同风格组 */
+export function themeAlbumSplit(album: PhotoRec[]): { merges: PhotoRec[]; unify: PhotoRec[] } {
+  const list = album.filter((p) => !!p.theme);
+  return { merges: list.filter((p) => p.merge), unify: list.filter((p) => !p.merge) };
+}
+
+/** 主题的素材照片（按 sourceIds 顺序） */
+export function themeSources(photos: PhotoRec[], t: ThemeRec): PhotoRec[] {
+  return t.sourceIds.map((id) => photos.find((p) => p.id === id)).filter((p): p is PhotoRec => !!p);
+}
+
+/** 主题的产出照片（按 outputIds 顺序） */
+export function themeOutputs(album: PhotoRec[], t: ThemeRec): PhotoRec[] {
+  return t.outputIds.map((id) => album.find((p) => p.id === id)).filter((p): p is PhotoRec => !!p);
 }

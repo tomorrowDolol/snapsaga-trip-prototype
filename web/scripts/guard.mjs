@@ -57,6 +57,14 @@ const cameraRuntimeSrc = srcText('store/cameraRuntime.ts');
 const filmViewSrc = srcText('components/FilmView.tsx');
 const albumViewSrc = srcText('components/AlbumView.tsx');
 const queuePanelSrc = srcText('components/QueuePanel.tsx');
+const queueSrc = srcText('domain/genQueue.ts');
+const themesSrc = srcText('domain/themes.ts');
+const promptSrc = srcText('domain/promptBuilder.ts');
+const collageSrc = srcText('domain/collage.ts');
+const queueRuntimeSrc = srcText('store/queueRuntime.ts');
+const themeViewSrc = srcText('components/ThemeView.tsx');
+const themeCreateSrc = srcText('components/ThemeCreateSheet.tsx');
+const darkroomSrc = srcText('components/DarkroomView.tsx');
 
 // 快门路径：capture() 只允许 await「本地取图」与「本机入库」两件事
 const captureBodyRaw = sliceFn(storeSrc, 'async capture() {', '// ---------------- 场景 / 水平仪');
@@ -99,13 +107,40 @@ check('列表只挂缩略图（thumb 优先，原图兜底）', /photo\.thumb \|
 check('队列面板缩略图优先级：结果缩略图 > 源片缩略图 > 原图', /task\.status === 'done' && task\.thumb\) \|\| srcPhoto\?\.thumb \|\| task\.blob/.test(queuePanelSrc));
 check('图片带 decoding="async"', /decoding="async"/.test(filmViewSrc) && /decoding="async"/.test(albumViewSrc) && /decoding="async"/.test(queuePanelSrc));
 check('图片带 loading="lazy"', /loading="lazy"/.test(filmViewSrc) && /loading="lazy"/.test(albumViewSrc) && /loading="lazy"/.test(queuePanelSrc));
-check('网格按 id 做 key（React 复用 DOM 节点 = 增量插入）', /photos\.map\(\(p\) => \(\s*<FilmCell key=\{p\.id\}/.test(filmViewSrc));
+check('网格按 id 做 key（React 复用 DOM 节点 = 增量插入）', /<FilmCell key=\{p\.id\}/.test(filmViewSrc));
 
 // 默认 Base
 check('默认 Base = https://api.klong.lat/v1', /AI_BASE_DEFAULT = 'https:\/\/api\.klong\.lat\/v1'/.test(settingsSrc));
 check('旧默认只保留一处（迁移识别用）', (settingsSrc.match(/api\.openai\.com/g) || []).length === 1);
 check('localStorage 键名与原型一致', ['ss_ai_base', 'ss_ai_key', 'ss_ai_model', 'ss_gen_auto', 'ss_gen_style'].every((k) => settingsSrc.includes(k)));
 check('IndexedDB 库名/仓名与原型一致', /DB_NAME = 'snapsaga'/.test(srcText('data/db.ts')) && /'photos'/.test(srcText('data/db.ts')) && /'queue'/.test(srcText('data/db.ts')));
+// 主题记录另开一个库：根原型把 snapsaga 钉在 v2，升到 v3 会让它直接 VersionError 打不开
+check('主题库是独立的（不把 snapsaga 升版本，根原型仍能读数据）', /THEMES_DB_NAME = 'snapsaga_themes'/.test(srcText('data/themesDb.ts')) && /DB_VERSION = 2/.test(srcText('data/db.ts')));
+
+/* ---------- 主题模式红线（v0.8） ---------- */
+check('并发上限常量 = 9（QUEUE_MAX）', /export const QUEUE_MAX = 9/.test(queueSrc));
+check('队列默认用 QUEUE_MAX（不是写死的 4）', /this\.MAX = deps\.MAX \?\? QUEUE_MAX/.test(queueSrc));
+check('运行时单例把 MAX 接成 QUEUE_MAX', /MAX: QUEUE_MAX/.test(queueRuntimeSrc));
+check('多图上限常量 = 9（THEME_MAX_SOURCES）', /export const THEME_MAX_SOURCES = COLLAGE_MAX_SOURCES/.test(themesSrc) && /COLLAGE_MAX_SOURCES = 9/.test(collageSrc));
+check('选图入口超过上限必须拒绝并给原因', /if \(pick\.length >= max\) return \{ pick: \[\.\.\.pick\], accepted: false, reason: PICK_REJECT_MESSAGE \}/.test(themesSrc));
+check('边拍边收入口超过上限必须拒绝并给原因', /if \(t\.sourceIds\.length >= THEME_MAX_SOURCES\) return \{ theme: t, accepted: false, reason: COLLECT_REJECT_MESSAGE \}/.test(themesSrc));
+check('第 10 张的提示文案里带「9 张」', /多图上限 \$\{THEME_MAX_SOURCES\} 张/.test(themesSrc));
+// 主题任务：一个任务只 active++ 一次（内部多张由 runTheme 通道自己循环）
+const addThemeBody = stripComments(sliceFn(queueSrc, 'addTheme(input: ThemeTaskInput): string {', '/** 队列里属于某个主题的任务'));
+check('addTheme() 抽到了源码（防止断言空跑）', addThemeBody.length > 300, `${addThemeBody.length} 字符`);
+check('addTheme() 只 push 一条任务（内部 2–9 张也只占 1 个槽位）', /this\.items\.push\(task\)/.test(addThemeBody) && !/for \s*\(/.test(addThemeBody));
+check('addTheme() 里带 n/k 分张进度字段（不是百分比）', /n: sources\.length/.test(addThemeBody) && /k: 0/.test(addThemeBody));
+const runBody = stripComments(sliceFn(queueSrc, 'run(task: QueueTask): void {', 'retry(id: string): boolean {'));
+check('主题任务走 runTheme 通道（逐张产出 / 进度回调）', /task\.kind === 'theme'/.test(runBody) && /runTheme\(task, \{/.test(runBody));
+check('主题任务的 active++ 只发生一次（循环在 runTheme 里，不在调度器里）', (runBody.match(/this\.active\+\+/g) || []).length === 1);
+check('主题任务逐张归档（archiveOutput 每个产出调一次）', /archiveOutput\(task, index, blob\)/.test(runBody));
+check('合成一张：本地拼图 → 单图润色（MULTI_IMAGE_EDITS_SUPPORTED 降级路径）', /composeCollage\(/.test(queueRuntimeSrc) && /MULTI_IMAGE_EDITS_SUPPORTED = false/.test(collageSrc));
+check('统一风格：逐张重绘、逐张归档（N 张 → N 张）', /for \(let i = 0; i < n; i\+\+\)/.test(queueRuntimeSrc) && /await h\.onOutput\(i, out\)/.test(queueRuntimeSrc));
+check('提示词词库共 32 个词（5 组）', (promptSrc.match(/PROMPT_GROUPS: PromptGroup\[\] = \[/) !== null) && /PROMPT_WORD_COUNT = PROMPT_GROUPS/.test(promptSrc));
+check('主题任务占 1 槽位的说明写进了界面（暗房）', /一个主题任务算/.test(darkroomSrc));
+check('相册有「主题作品」分组', /主题作品/.test(albumViewSrc) && /themeAlbumSplit/.test(srcText('store/useAppStore.ts')));
+check('没有付费 / Pro 横幅（设计稿已删，不许加回来）', !/升级 ?Pro|Pro ?版|订阅会员|付费解锁|解锁全部/.test([storeSrc, themeViewSrc, themeCreateSrc, albumViewSrc, darkroomSrc, srcText('components/SettingsDrawer.tsx')].join('\n')));
+check('边拍边收在快门路径上是**同步**收图（不增加 await）', /if \(get\(\)\.collectIntoActiveTheme\(rec\)\) return;/.test(captureBody));
 
 // 本地绝对路径不许入库（本机路径泄露）
 const LOCAL_PATH = '/' + 'Users' + '/';
@@ -147,6 +182,10 @@ if (!existsSync(join(DIST, 'app.html'))) {
   check('产物里列表仍挂 thumb', /\.thumb/.test(bundle));
   check('产物里图片属性仍在（decoding=async / loading=lazy）', /decoding[:=]\s*[`"']async[`"']/.test(bundle) && /loading[:=]\s*[`"']lazy[`"']/.test(bundle));
   check('产物里有 320 / .72 缩略图规格', /\b320\b/.test(bundle) && /\.72\b/.test(bundle));
+  check('产物里有主题任务的阶段文案（拼合中 / 统一风格中）', /拼合中/.test(bundle) && /统一风格中/.test(bundle));
+  check('产物里有拼图降级路径与上限文案（可读错误 + 第 10 张提示）', /没有可合成的照片/.test(bundle) && /多图上限/.test(bundle));
+  check('产物里有场景插画（内联 SVG 插画模块被打进包）', /ss-art-/.test(bundle));
+  check('产物里没有付费 / Pro 横幅文案', !/升级 ?Pro|Pro ?版|订阅会员|付费解锁/.test(bundle));
   check('PWA 文件已随构建产出（manifest + sw.js + 图标）', existsSync(join(DIST, 'manifest.webmanifest')) && existsSync(join(DIST, 'sw.js')) && existsSync(join(DIST, 'icon-512.png')));
   // sw.js 的预缓存清单必须都是真实存在的文件：addAll 是原子的，一个 404 就会让整个预缓存失效
   const swSrc = existsSync(join(DIST, 'sw.js')) ? read(join(DIST, 'sw.js')) : '';
@@ -218,6 +257,10 @@ if (!pw) {
       await page.click('#shutter');
       await page.waitForTimeout(80);
     }
+    for (let i = 0; i < 4; i++) {
+      await page.click('#shutter');
+      await page.waitForTimeout(80);
+    }
     await page.waitForTimeout(600);
     const st = await page.evaluate(async () => {
       const all = await __snapsaga.db.all();
@@ -230,9 +273,77 @@ if (!pw) {
     });
     check('页面零 JS 运行时错误', pageErrors.length === 0, pageErrors.join(' | '));
     check('点击快门同步返回（产物里也没有 await 网络）', clickMs < 50, `${clickMs.toFixed(1)} ms`);
-    check('生图接口挂死时 6 张照片仍全部入库（快门不等网络）', st.photos === 6, `${st.photos} 张`);
-    check('队列同步收到 6 条任务', st.queue === 6, `${st.queue} 条`);
-    check('产物里的并发上限仍是 4', st.peak === 4 && st.running === 4, `peak=${st.peak} running=${st.running}`);
+    check('生图接口挂死时 10 张照片仍全部入库（快门不等网络）', st.photos === 10, `${st.photos} 张`);
+    check('队列同步收到 10 条任务', st.queue === 10, `${st.queue} 条`);
+    check('产物里的并发上限 = 9（第 10 个起排队）', st.peak === 9 && st.running === 9, `peak=${st.peak} running=${st.running}`);
+
+    // ---- 主题模式红线（真产物 + 真 store + 真队列）----
+    const themeSt = await page.evaluate(() => {
+      const s = __snapsaga;
+      const ids = s.photos().map((p) => p.id);
+      s.openThemeCreate(false);
+      ids.forEach((id) => s.toggleThemePick(id));
+      const pickedAfterTen = s.store.getState().themePick.length;
+      const limit = s.limits.maxSources;
+      // 一个主题任务：9 张素材，看它占几个槽位
+      const before = s.queueItems().filter((t) => t.status === 'running').length;
+      const sources = s
+        .photos()
+        .slice(0, 9)
+        .map((p) => ({ id: p.id, blob: p.blob }));
+      s.addThemeTask({
+        themeId: 'guard-theme',
+        themeName: '守卫主题',
+        prompt: '守卫用主题提示词',
+        mode: 'unify',
+        layout: '网格拼贴',
+        strength: 0.62,
+        sources,
+      });
+      const items = s.queueItems();
+      const themeTask = items.find((t) => t.themeId === 'guard-theme');
+      return {
+        limit,
+        queueMax: s.limits.queueMax,
+        pickedAfterTen,
+        photos: s.photos().length,
+        before,
+        runningAfter: items.filter((t) => t.status === 'running').length,
+        queuedTheme: themeTask ? themeTask.status : null,
+        active: s.queue.active,
+        themeTask: themeTask ? { kind: themeTask.kind, n: themeTask.n, k: themeTask.k, sources: (themeTask.sources ?? []).length } : null,
+      };
+    });
+    check('多图上限 = 9：10 张照片里点满只有 9 张被选中（第 10 张被拒）', themeSt.limit === 9 && themeSt.pickedAfterTen === 9, `limit=${themeSt.limit} picked=${themeSt.pickedAfterTen} photos=${themeSt.photos}`);
+    check('并发上限 = 9（__snapsaga.limits.queueMax）', themeSt.queueMax === 9, String(themeSt.queueMax));
+    check('主题任务 9 张素材仍然只 push 一条任务（kind=theme / n=9 / sources=9）', themeSt.themeTask?.kind === 'theme' && themeSt.themeTask.sources === 9 && themeSt.themeTask.n === 9, JSON.stringify(themeSt.themeTask));
+    check('队列满时主题任务乖乖排队（不挤掉别人、不越限）', themeSt.runningAfter === 9 && themeSt.queuedTheme === 'queued', `running=${themeSt.runningAfter} theme=${themeSt.queuedTheme}`);
+    check('队列满时 active 不被多算（仍是 9，不是 9+9）', themeSt.active === 9, `before=${themeSt.before} active=${themeSt.active}`);
+
+    // 空队列里放一个 9 张的主题任务：只应该占 1 个槽位（active=1，不是 9）
+    const slotSt = await page.evaluate(() => {
+      const s = __snapsaga;
+      s.queue.reset(); // 清掉前面挂死的 10 个任务，只留下面这一个
+      const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+      s.addThemeTask({
+        themeId: 'guard-slot',
+        themeName: '槽位验证',
+        prompt: '槽位验证提示词',
+        mode: 'unify',
+        strength: 0.62,
+        sources: Array.from({ length: 9 }, (_, i) => ({ id: 'x' + i, blob })),
+      });
+      const items = s.queueItems();
+      return {
+        total: items.length,
+        running: items.filter((t) => t.status === 'running').length,
+        active: s.queue.active,
+        max: s.queue.MAX,
+        n: items[0]?.n,
+      };
+    });
+    check('9 张素材的主题任务只占 1 个槽位（running=1 / active=1，不是 9）', slotSt.total === 1 && slotSt.running === 1 && slotSt.active === 1 && slotSt.n === 9, JSON.stringify(slotSt));
+    check('运行时 MAX = 9', slotSt.max === 9, String(slotSt.max));
   } catch (e) {
     check('运行时断言执行成功', false, e.message);
   } finally {

@@ -1,5 +1,6 @@
-/** 构图网格 SVG（三分 / 黄金螺旋），与根目录原型逐字符一致 */
-export function gridSVG(mode: 'thirds' | 'spiral'): string {
+/** 构图网格 SVG（三分 / 黄金螺旋 / 关），与根目录原型逐字符一致 */
+export function gridSVG(mode: 'thirds' | 'spiral' | 'off'): string {
+  if (mode === 'off') return '';
   if (mode === 'spiral') {
     return `<svg viewBox="0 0 100 100" preserveAspectRatio="none">
       <g stroke="rgba(255,255,255,.45)" stroke-width=".35" fill="none">

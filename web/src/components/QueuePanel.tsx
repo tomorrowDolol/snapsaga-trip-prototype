@@ -24,15 +24,19 @@ function QueueItem({ task, position }: { task: QueueTask; position: number | nul
   const retryTask = useAppStore((s) => s.retryTask);
   const dropTask = useAppStore((s) => s.dropTask);
   const label = task.status === 'queued' ? `排队中 · 第 ${position} 位` : Q_LABEL[task.status];
+  const isTheme = task.kind === 'theme';
   return (
     <div className={`q-item ${task.status}`}>
       <QueueThumb task={task} />
       <div className="q-main">
         <div className="q-title">
-          {task.styleName || 'AI 生图'} <span className={`q-badge ${task.status}`}>{label}</span>
+          {task.styleName || 'AI 生图'}{' '}
+          {isTheme ? <span className="q-badge theme">{task.mode === 'merge' ? '合成一张' : '统一风格'}</span> : null}
+          <span className={`q-badge ${task.status}`}>{label}</span>
         </div>
         <div className="q-time">
           {fmtTime(new Date(task.ts))}
+          {isTheme ? ` · ${task.stage || '主题任务'} ${task.k ?? 0}/${task.n ?? 0} 张` : ''}
           {task.status === 'running' ? (
             <>
               {' · '}
@@ -88,7 +92,7 @@ export function QueuePanel() {
             <div className="queue-empty">
               队列是空的
               <br />
-              <span>在「取景」拍一张，就会在后台排队生图（同时最多 4 个）</span>
+              <span>在「取景」拍一张，就会在后台排队生图（同时最多 {queue.MAX} 个）</span>
             </div>
           ) : (
             items.map((t) => <QueueItem key={t.id} task={t} position={positions.get(t.id) ?? null} />)

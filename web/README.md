@@ -1,8 +1,16 @@
 # 拾光 SnapSaga · web/（工程化版本）
 
-根目录的 `index.html` 是**单文件原型**（v0.6，仍然是当前线上入口之一）。这里是同一套功能的
-**工程化版本**：React 19 + TypeScript（严格模式）+ Vite + Tailwind + Zustand，带真单测、真 e2e
-与红线 guard。目的不是加功能，而是让后续修改更快、更不容易改坏。
+根目录的 `index.html` 是**单文件原型**（v0.6，仍然是当前线上入口之一）。这里是**功能演进主线**：
+React 19 + TypeScript（严格模式）+ Vite + Tailwind + Zustand，带真单测、真 e2e 与红线 guard。
+
+v0.8 起 `web/` 以「**主题模式**」为中心（视觉与信息架构以主题模式设计稿为准：深底 + 琥珀金、
+六个 tab：取景·主题·胶卷·暗房·相册·设置）：
+
+- **主题是一等公民**：写一句提示词（5 组 32 词拼装 + 实时预览 + 质量提示）→ 选 2–9 张图 → 两种产出
+  （**合成一张** N→1 / **统一风格** N→N）；主题可复用提示词、可「再来一版」、可**边拍边收**。
+- **边拍边收**：启用主题后取景页顶部出现主题条，每按一次快门就把照片同步收进主题并立刻入队重绘；
+  **快门路径依然不 await 任何 AI / 网络**。
+- **并发 9 / 多图 9 / 一个主题任务只占 1 个槽位**（槽位显示 `k/n` 分张进度）。
 
 > 铁律仍然成立：**根 `index.html` 一行都不改**。两个入口同源、同库、同 localStorage 键，互相读得懂对方的数据。
 
@@ -26,23 +34,28 @@ web/
 ├── public/                    # 原样拷进 dist：sw.js / manifest.webmanifest / 图标（svg + png）
 ├── src/
 │   ├── main.tsx               # 挂载 + 调试桥 + 注册 Service Worker
-│   ├── App.tsx                # 五个视图都保持挂载（相机流与已解码网格不该被切页销毁）
-│   ├── styles.css             # 视觉层：逐行移植自根 index.html 的 <style>，选择器/类名保持一致
+│   ├── App.tsx                # 七个视图都保持挂载（相机流与已解码网格不该被切页销毁）
+│   ├── styles.css             # 视觉层：v0.8 起以主题模式设计稿为准（深底 + 琥珀金 + 等宽数字）
 │   ├── domain/                # 纯逻辑（可单测，不依赖 React）
 │   │   ├── sun.ts             # 太阳算法（逐行等价搬迁，见下）
-│   │   ├── genQueue.ts        # 生图队列调度引擎（依赖注入，纯逻辑）
+│   │   ├── genQueue.ts        # 生图队列调度引擎（QUEUE_MAX=9 / 主题任务只占 1 槽位 / 依赖注入）
+│   │   ├── themes.ts          # 主题数据模型 + 状态机 + 多图上限 9（纯逻辑）
+│   │   ├── promptBuilder.ts   # 提示词词库（5 组 32 词）+ 拼装 + 质量提示
+│   │   ├── collage.ts         # 合成一张：布局几何（网格/无缝/故事板）+ canvas 拼图
+│   │   ├── sceneArt.ts        # 8 张场景插画 + 相机机身 + 胶卷盒（内联 SVG，逐值搬迁自设计稿）
 │   │   ├── capture.ts         # 静止图像优先 + 一次性抓帧回落 + 按能力下约束
 │   │   ├── thumbs.ts          # 缩略图（最长边 320 / jpeg .72）
 │   │   ├── settings.ts        # localStorage 键名 + AI Base 取值逻辑
-│   │   ├── aiRedraw.ts        # 唯一 AI 通道（aiRedrawCore）
+│   │   ├── aiRedraw.ts        # 唯一 AI 通道（aiRedrawCore）；主题任务也走它（提示词伪装成 EditStyle）
 │   │   ├── polaroid.ts        # 拍立得合成
 │   │   ├── editFilter.ts      # 本地滤镜（离线可用）
 │   │   ├── presets.ts         # 5 个风格 + 3 种胶片 + 注记文案
-│   │   ├── scenes.ts          # 8 个场景卡与构图提示
+│   │   ├── scenes.ts          # 8 个场景卡与构图提示（网格模式含「关」）
 │   │   ├── media.ts           # blob↔image / 保存分享
-│   │   └── types.ts           # PhotoRec / QueueTask（字段与原型一致）
+│   │   └── types.ts           # PhotoRec / QueueTask / ThemeRec（老字段不变，只增可选字段）
 │   ├── data/db.ts             # IndexedDB：库名 snapsaga，仓 photos / queue（版本 2，只增不清）
-│   ├── store/                 # Zustand：useAppStore + 相机运行时 + 队列单例
+│   ├── data/themesDb.ts       # 主题独立库 snapsaga_themes（v1）：不升 snapsaga 版本，见「数据兼容」
+│   ├── store/                 # Zustand：useAppStore（含主题 slice）+ 相机运行时 + 队列单例
 │   ├── hooks/useObjectUrl.ts  # blob → objectURL，卸载即回收
 │   ├── components/            # 视图与面板（id/类名与原型对齐，旧验收脚本可直接跑）
 │   ├── debug/bridge.ts        # window.__snapsaga + 兼容旧脚本的全局名（只读）
@@ -58,9 +71,9 @@ web/
 npm install
 npm run dev        # 本地开发（localhost 可绕过 HTTPS 限制测相机）
 npm run build      # tsc --noEmit && vite build && 生成 web/index.html（TS 严格模式零错误才通过）
-npm test           # Vitest + jsdom：队列调度 / 缩略图 / AI Base / 太阳算法等价性 / 相机取图
+npm test           # Vitest + jsdom：队列调度 / 主题模型 / 提示词 / 拼图 / 场景插画 / 缩略图 / AI Base / 太阳算法 / 相机取图
 npm run guard      # 红线断言：源码侧 + 构建产物侧 + 产物运行时（真 Chromium 加载 dist）
-npm run e2e        # Playwright 四组验收（需要先 build）
+npm run e2e        # Playwright 五组验收（需要先 build）
 npm run verify     # build → test → guard → e2e 一条龙
 ```
 
@@ -73,13 +86,20 @@ npm run verify     # build → test → guard → e2e 一条龙
 
 | 项目 | 值 |
 |------|-----|
-| IndexedDB | 库名 `snapsaga`；仓 `photos`(keyPath `id`) 与 `queue`(keyPath `id`)，版本 2 |
-| 照片记录 | `{id, blob, ts, shot, thumb?, kind?, from?, style?, styleName?}`（含 `thumb`） |
+| IndexedDB（照片/队列） | 库名 `snapsaga`；仓 `photos`(keyPath `id`) 与 `queue`(keyPath `id`)，**版本仍是 2** |
+| IndexedDB（主题） | 库名 `snapsaga_themes`；仓 `themes`(keyPath `id`)，版本 1（v0.8 新增，只存 id 引用、不存 blob） |
+| 照片记录 | `{id, blob, ts, shot, thumb?, kind?, from?, style?, styleName?, theme?, themeName?, merge?, ids?, layout?}` |
 | localStorage | `ss_ai_base` / `ss_ai_key` / `ss_ai_model` / `ss_gen_auto` / `ss_gen_style` / `snapsaga_geo` |
 | AI 默认 Base | `https://api.klong.lat/v1`（未填过或等于旧默认 `https://api.openai.com/v1` 时用它；显式填过的自定义值尊重，去尾部斜杠） |
 
+**为什么主题不放进 `snapsaga` 库**：根原型用 `indexedDB.open('snapsaga', 2)` 打开，而浏览器里一个库
+一旦升到更高版本，再用**更低版本**打开会直接抛 `VersionError` —— 只要我们把 `snapsaga` 升到 v3 加一个
+`themes` 仓，冻结的根原型（v0.6）就再也读不到用户数据了。「两个入口同源同库、互相读得懂」是铁律，
+所以主题另开一个独立库；照片本体仍然全在 `snapsaga` 里，两边都读得到。
+
 表结构升级只允许**新增版本 + 兼容迁移**，不许清库。老记录没有 `thumb` 字段时会在启动后
-逐张后台回填（一次一张、让出主线程），补好即落库。
+逐张后台回填（一次一张、让出主线程），补好即落库。`PhotoRec` 在 v0.8 只新增**可选**字段，
+老版本读到会忽略（不会因为多字段而读不懂）。
 
 ## 部署要点（详见根 README）
 
@@ -100,10 +120,20 @@ npm run verify     # build → test → guard → e2e 一条龙
 
 | 层 | 工具 | 数量 | 说明 |
 |----|------|------|------|
-| 单测 | Vitest + jsdom | 53 个测试 | 队列调度（并发峰值 4 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）、缩略图尺寸与编码参数、AI Base 取值、太阳算法等价性、相机取图三环境与能力约束 |
-| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | 75 项 | 主链路 35 / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
-| 红线 guard | node + Playwright | 61 项 | 源码侧 31 / 产物侧 18 / 产物运行时 5 / 子路径部署冒烟 7 |
+| 单测 | Vitest + jsdom | **149** 个测试（10 个文件） | 队列调度（并发峰值 9 / 主题任务占 1 槽位 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）9 · 主题模型（状态机 / 两条上限 9 / 产出条数）22 · 提示词拼装 14 · 拼图布局与合成 27 · 场景插画 18 · 缩略图 14 · 相机取图 16 · AI Base 11 · 太阳算法等价性 3 |
+| 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | **139** 项 | 主链路 36（并发 9）/ **主题模式 63** / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
+| 红线 guard | node + Playwright | **93** 项 | 源码侧 47 / 产物侧 22 / 产物运行时 12 / 子路径部署冒烟 7 |
 | 构建 | tsc（严格）+ vite | — | `npm run build` 零错误 |
+
+主题模式专项 e2e（`e2e/acceptance-theme-mode.e2e.mjs`，63 项）四个场景：
+
+1. **创建主题（词库拼装）→ 合成一张 → 相册出现 1 张**：点选词 → 预览/质量提示 → 选 3 张 → 队列 1 条
+   主题任务（`n=3`）→ 槽位 `0/3 → 3/3` → 产出 1 张、AI 只调 1 次（拼图在本地）。
+2. **统一风格 + 边拍边收 → 连拍 3 张**：主题条出现 → 快门同步返回 0.6 ms → 主题收 3 张、队列 3 个
+   `n=1` 子任务、产出 3 张 → 结束主题 `ended` + 跳暗房 → 「继续边拍边收」追加第 4 张（素材 4 / 产出 4）。
+3. **选满 9 张后第 10 张被拒**：全选只选到 9 张 → 点第 10 张 → toast 提示「多图上限 9 张」且选图集合不变 →
+   取消一张后可以继续选。
+4. **并发峰值 9 / 第 10 个任务排队**：10 连拍 → 9 在跑 + 1 排队 + 峰值 9；暗房 9 个显影槽全忙、统计与徽标一致。
 
 e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check/*.cjs` 与 `ss_e2e.cjs`），
 **断言逐条保留、未放松**。两处必要适配（都是"换了实现方式"，不是放宽）：
@@ -113,6 +143,10 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
    「反复重渲染 created 增量为 0」+「删除一张图 → 该元素卸载且其 URL 被 revoke，活跃数不增长」。
 2. **openai 常量出现次数**：原型源码内联在 HTML 里，React 版在构建产物 JS 里，所以那条断言改成
    「页面 HTML 里 0 处 + 产物里恰好 1 处」。
+3. **并发上限 4 → 9**（v0.8，按设计稿）：主链路的连拍数从 6 提到 10（10 张才观察得到「9 在跑 + 1 排队」），
+   徽标断言从「6」改成「9+」（徽标本来就按设计稿封顶到 9+，待处理数量的真值改由队列断言）。
+4. **活跃 objectURL 阈值**：从写死的 `≤ 60` 换成更强的**不变量**「活跃 URL ≤ 当前挂载的 `blob:` 图片元素数 + 5」
+   —— 界面同时挂载的图变多了（胶片条 + 相册 + 显影槽 + 底部胶片条），写死数字会误报。
 
 ## 未覆盖 / 已知限制
 
@@ -123,6 +157,12 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
 - **AI 直连的 CORS 限制不变**（K3）：原型与新应用都是浏览器直连你配置的 Base，正式版走网关。
 - 未用真实 Key 打通 `api.klong.lat`（无凭证）。
 - 切后台页面被挂起的问题不变（K15）：队列只在页面活跃时推进。
+- **主题的「真实出图效果」无法在 CI 里验**（K24）：e2e 只 stub 生图接口（返回 8×8 png），能证明
+  「本地拼图 → 单图润色」的链路通、产出张数对、进度与归档对；但「合成一张像不像海报」「统一风格是否
+  真统一」取决于模型能力，只能在真机 + 真 Key 下确认。
+- **「无缝融合」是启发式**（K26）：客户端拼图不留缝 + 叠柔化渐变，接缝连续性靠 AI 润色兜；
+  真无缝要模型侧支持多图入参，开关预留在 `domain/collage.ts` 的 `MULTI_IMAGE_EDITS_SUPPORTED`。
+- 设置是**底部抽屉**而不是独立页面（K27）：避免出现两份设置表单（重复 id + 双份维护）。
 - PWA 离线缓存是保守策略（导航 network-first、静态资源 stale-while-revalidate）；首次打开仍需网络。
   SW 的 scope 是 `/web/dist/`（sw.js 就在产物目录里），所以主屏安装后的 `start_url` 落在 scope 内、离线可用；
   而 `/web/` 入口页本身不在 scope 内（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常）
@@ -132,6 +172,7 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
 
 | 想改的东西 | 改哪里 |
 |-----------|--------|
-| 体验/算法/队列等**真实功能** | `web/src/**`，然后 `npm run verify` 全绿（`web/dist` 由 CI 构建，不提交） |
+| 体验/算法/队列/主题等**真实功能** | `web/src/**`，然后 `npm run verify` 全绿（`web/dist` 由 CI 构建，不提交） |
+| 主题模式的视觉与信息架构 | 主题模式设计稿（深底 + 琥珀金 / 六个 tab）；改视觉改 `src/styles.css` 与对应组件，别动 `index.html` |
 | 只想让线上原型立刻变一下（不想碰构建） | 根 `index.html`（记得三同步：版本号 + iteration-log） |
 | 两者都要一致 | 优先改 `web/`（有测试守着），根原型只在必要时同步；`sun.ts` 的改动必须先跑等价性测试 |

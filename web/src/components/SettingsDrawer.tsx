@@ -1,3 +1,5 @@
+import { QUEUE_MAX } from '../domain/genQueue';
+import { THEME_MAX_SOURCES } from '../domain/themes';
 import { useAppStore } from '../store/useAppStore';
 
 export function SettingsDrawer() {
@@ -32,7 +34,7 @@ export function SettingsDrawer() {
           启用黄金时刻提醒
         </button>
 
-        <h3>✨ AI 重绘（可选）</h3>
+        <h3>✨ AI 重绘 / 生图（可选）</h3>
         <p className="desc">
           正式版走自家网关，原型允许直连体验。Key 只存本机 localStorage。无 Key 时本地滤镜全部可用。
         </p>
@@ -68,6 +70,35 @@ export function SettingsDrawer() {
           <button className="mini ghost" id="btnAiSave" onClick={s.saveAi}>
             保存
           </button>
+        </div>
+
+        <h3>✨ 主题模式</h3>
+        <p className="desc">
+          写一句主题 → 选 2–9 张图 → AI 图生图。主题记录存在独立库（不碰与根原型共用的 snapsaga 库）。
+        </p>
+        <div className="rl">
+          <span>主题默认强度</span>
+          <span className="v" id="setStrength">
+            {s.themeStrength.toFixed(2)}
+          </span>
+        </div>
+        <div className="rl">
+          <span>合成布局</span>
+          <span className="v" id="setLayout">
+            {s.themeLayout}
+          </span>
+        </div>
+        <div className="rl">
+          <span>保留原构图</span>
+          <div className="sw on" id="setKeepFraming" />
+        </div>
+        <div className="rl">
+          <span>主题任务并发</span>
+          <span className="v">算 1 个槽位（共 {QUEUE_MAX}）</span>
+        </div>
+        <div className="rl">
+          <span>多图上限</span>
+          <span className="v">{THEME_MAX_SOURCES} 张</span>
         </div>
 
         <h3>🗂 数据</h3>

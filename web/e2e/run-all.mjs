@@ -1,5 +1,5 @@
 /**
- * 统一 e2e 入口：依次跑四组验收脚本（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口）。
+ * 统一 e2e 入口：依次跑五组验收脚本（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口）。
  * 需要先 npm run build（脚本跑的是 dist 产物，不是 dev server）。
  *   node e2e/run-all.mjs
  * 对应根目录原型的四个验收脚本：ss_e2e.cjs / check_thumbs.cjs / check_capture.cjs / check_ai_base.cjs。
@@ -18,7 +18,8 @@ if (!existsSync(resolve(DIST, 'app.html'))) {
 }
 
 const scripts = [
-  ['主链路（快门不阻塞 / 并发 4 / 刷新恢复 / 失败重试 / 归档）', 'acceptance-main-chain.e2e.mjs'],
+  ['主链路（快门不阻塞 / 并发 9 / 刷新恢复 / 失败重试 / 归档）', 'acceptance-main-chain.e2e.mjs'],
+  ['主题模式（两种产出 / 边拍边收 / 多图上限 9 / 并发 9）', 'acceptance-theme-mode.e2e.mjs'],
   ['缩略图与增量渲染（13 项）', 'acceptance-thumbs.e2e.mjs'],
   ['拍照三环境与能力约束（15 项）', 'acceptance-capture.e2e.mjs'],
   ['AI 默认 Base 真浏览器生效（9 项）', 'acceptance-ai-base.e2e.mjs'],
