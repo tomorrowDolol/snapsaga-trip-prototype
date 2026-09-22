@@ -12,6 +12,8 @@
 | 🗓 P0 落地计划（8 周 WBS/验收门槛/风险） | [docs/p0-plan.md](docs/p0-plan.md) |
 | 🔁 迭代日志（版本记录 / 已知问题 / 下一步） | [docs/iteration-log.md](docs/iteration-log.md) |
 
+> 当前原型 v0.2：拍照与 AI 生图解耦——按快门只存胶卷，生图进后台队列（最多 4 并发，先入先跑），完成后归档到「AI 相册」。
+
 ## 目录结构
 
 ```
@@ -20,8 +22,20 @@
 │   ├── design-v0.1.html  # 产品设计稿：产品定位 / 四大模块 / 架构 / Prompt 策略 / 路线图
 │   ├── p0-plan.md        # P0 落地计划：技术决策 / 里程碑 Gate / WBS / 风险登记簿
 │   └── iteration-log.md  # 迭代日志：每版记录、已知问题、下一步候选
+├── tools/
+│   └── check_gen_queue.mjs  # 开发用验证脚本（零依赖）：从 index.html 抽真实队列源码跑调度/持久化断言
 └── README.md
 ```
+
+## 本地验证
+
+```bash
+python3 -c "..."                  # 1. HTML 标签闭合（html.parser）
+# 2. 抽出全部 <script> 跑 node --check
+node tools/check_gen_queue.mjs    # 3. 生图队列：并发 4 / FIFO / 失败重试 / 刷新恢复 / 归档
+```
+
+`tools/` 里的脚本只是开发验证工具，不是运行时依赖，不影响「单文件原型」这条约束。
 
 ## 如何迭代
 

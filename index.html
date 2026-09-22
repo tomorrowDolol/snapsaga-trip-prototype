@@ -31,7 +31,16 @@
   header.app .logo{font-weight:800; letter-spacing:1px; font-size:16px}
   header.app .logo em{font-style:normal; color:var(--accent)}
   header.app .sub{font-size:10px; opacity:.65; letter-spacing:2px}
-  .iconbtn{font-size:20px; padding:6px 10px; color:#fff; opacity:.9}
+  .iconbtn{font-size:20px; padding:6px 10px; color:#fff; opacity:.9; position:relative}
+  header.app .right{display:flex; align-items:center; gap:2px}
+  /* 生图队列入口徽标：右边数字 = 生成中 + 排队中 */
+  .iconbtn .badge{
+    display:none; position:absolute; top:2px; right:2px; min-width:16px; height:16px; padding:0 4px;
+    border-radius:999px; background:var(--accent); color:#fff; font-size:10px; font-weight:800; line-height:16px; text-align:center;
+  }
+  .iconbtn .badge.show{display:block}
+  .iconbtn .badge.hot{background:var(--teal); animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
   /* 非安全上下文横幅 */
   .ctx-banner{
@@ -94,6 +103,15 @@
     border-top:1px solid var(--line); min-height:44px;
   }
   #sceneTip b{color:var(--teal)}
+  /* 拍完自动生图：开关 + 风格选择（生图在后台排队，不用等） */
+  #genBar{flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card); border-top:1px solid var(--line)}
+  #genToggle{flex:0 0 auto; font-size:12px; font-weight:800; padding:7px 12px; border-radius:999px; background:var(--bg); border:1px solid var(--line); color:var(--soft); white-space:nowrap}
+  #genToggle.on{background:var(--teal); color:#fff; border-color:var(--teal)}
+  #genStyles{flex:1 1 auto; display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; min-width:0}
+  #genStyles::-webkit-scrollbar{display:none}
+  #genStyles.off{opacity:.4}
+  .gen-chip{flex:0 0 auto; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; background:var(--bg); border:1px solid var(--line); color:var(--soft); white-space:nowrap}
+  .gen-chip.on{background:var(--ink); color:#fff; border-color:var(--ink)}
   /* 快门行 */
   #shutterRow{
     flex:0 0 auto; display:flex; align-items:center; justify-content:space-around;
@@ -120,7 +138,7 @@
   .empty .big{font-size:42px; opacity:.7}
 
   /* 胶卷 */
-  #filmGrid{flex:1; overflow-y:auto; padding:4px 12px 20px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-content:start}
+  #filmGrid,#albumGrid{flex:1; overflow-y:auto; padding:4px 12px 20px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-content:start}
   .film-cell{position:relative; aspect-ratio:1; border-radius:10px; overflow:hidden; background:#e8e2d5}
   .film-cell img{width:100%; height:100%; object-fit:cover}
   .film-cell .ts{position:absolute; left:5px; bottom:4px; font-size:9px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7)}
@@ -128,6 +146,7 @@
   .film-cell .sel-mark{position:absolute; right:5px; top:5px; width:20px; height:20px; border-radius:50%;
     background:var(--accent); color:#fff; font-size:12px; display:none; align-items:center; justify-content:center}
   .film-cell.sel .sel-mark{display:flex}
+  .film-cell .src-mark{position:absolute; right:5px; top:5px; font-size:11px; text-shadow:0 1px 3px rgba(0,0,0,.7)}
   #filmActions{
     flex:0 0 auto; display:flex; gap:10px; padding:12px 16px calc(env(safe-area-inset-bottom) + 14px);
     background:var(--card); border-top:1px solid var(--line);
@@ -193,18 +212,48 @@
   .edit-actions .btn{padding:11px}
 
   /* ============ 设置抽屉 ============ */
-  #settingsMask{position:fixed; inset:0; background:rgba(16,28,29,.5); z-index:98; display:none}
-  #settingsMask.show{display:block}
-  #settings{
+  #settingsMask,#queueMask{position:fixed; inset:0; background:rgba(16,28,29,.5); z-index:98; display:none}
+  #settingsMask.show,#queueMask.show{display:block}
+  #settings,#queuePanel{
     position:fixed; left:0; right:0; bottom:0; z-index:99; background:var(--card);
     border-radius:22px 22px 0 0; max-height:86vh; overflow-y:auto; display:none;
     padding:8px 20px calc(env(safe-area-inset-bottom) + 20px); transform:translateY(100%); transition:transform .3s;
   }
-  #settings.show{display:block; transform:none}
-  #settings .grab{width:44px; height:5px; border-radius:99px; background:var(--line); margin:6px auto 12px}
-  #settings h3{font-size:16px; margin:18px 0 8px}
-  #settings h3:first-of-type{margin-top:4px}
-  #settings p.desc{font-size:12px; color:var(--soft); margin-bottom:8px}
+  #settings.show,#queuePanel.show{display:block; transform:none}
+  #settings .grab,#queuePanel .grab{width:44px; height:5px; border-radius:99px; background:var(--line); margin:6px auto 12px}
+  #settings h3,#queuePanel h3{font-size:16px; margin:18px 0 8px}
+  #settings h3:first-of-type,#queuePanel h3:first-of-type{margin-top:4px}
+  #settings p.desc,#queuePanel p.desc{font-size:12px; color:var(--soft); margin-bottom:8px}
+
+  /* 生图队列面板 */
+  #queueSummary{font-size:11.5px; color:var(--soft); margin-bottom:10px}
+  .queue-empty{text-align:center; color:var(--soft); font-size:13px; padding:26px 10px; line-height:1.8}
+  .queue-empty span{font-size:11.5px; opacity:.8}
+  .q-item{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .q-item:last-child{border-bottom:none}
+  .q-thumb{flex:0 0 auto; width:54px; height:54px; border-radius:10px; object-fit:cover; background:#e8e2d5; display:block}
+  .q-main{flex:1; min-width:0}
+  .q-title{font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .q-badge{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; background:var(--bg); color:var(--soft); border:1px solid var(--line)}
+  .q-badge.running{background:#E7F3F3; color:var(--teal); border-color:#BCE0E0}
+  .q-badge.done{background:#E9F6EC; color:#2F7A45; border-color:#C6E7D1}
+  .q-badge.failed{background:#FDEBEA; color:#B23B32; border-color:#F6CFCB}
+  .q-time{font-size:11px; color:var(--soft); margin-top:2px}
+  .q-err{font-size:11.5px; color:#B23B32; margin-top:4px; line-height:1.5; word-break:break-word}
+  .q-acts{display:flex; gap:8px; margin-top:6px}
+  .q-acts .mini{padding:6px 12px; font-size:12px}
+  .q-dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--teal); animation:pulse 1s infinite; vertical-align:middle}
+
+  /* AI 相册大图查看 */
+  #lightbox{position:fixed; inset:0; z-index:140; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(16,28,29,.94); padding:20px}
+  #lightbox.show{display:flex}
+  #lbImg{max-width:92vw; max-height:62vh; border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,.5)}
+  #lbMeta{color:#fff; opacity:.8; font-size:12px; text-align:center}
+  .lb-actions{display:flex; gap:10px}
+  .lb-actions .btn{min-width:92px; background:rgba(255,255,255,.14); color:#fff; border-color:transparent}
+  .lb-actions .btn.primary{background:var(--accent); color:#fff}
+  .lb-actions .btn.danger{background:#B23B32; color:#fff}
+  #lbClose{color:#fff; opacity:.85; font-size:13px; font-weight:700}
   .field{display:flex; gap:8px; margin-bottom:8px}
   .field input{flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); min-width:0}
   .field input:focus{outline:2px solid rgba(255,138,61,.4)}
@@ -226,7 +275,7 @@
   }
   nav.bottom button{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:1px;
-    font-size:10.5px; color:var(--soft); padding:5px 0;
+    font-size:10px; color:var(--soft); padding:5px 0;
   }
   nav.bottom button .ic{font-size:21px}
   nav.bottom button.on{color:var(--accent); font-weight:800}
@@ -237,9 +286,12 @@
 <header class="app">
   <div>
     <div class="logo">拾光<em>·</em>SnapSaga</div>
-    <div class="sub">TRIP PROTOTYPE v0.1</div>
+    <div class="sub">TRIP PROTOTYPE v0.2</div>
   </div>
-  <button class="iconbtn" id="btnSettings" title="设置">⚙︎</button>
+  <div class="right">
+    <button class="iconbtn" id="btnQueue" title="生图队列">✨<span class="badge" id="queueBadge">0</span></button>
+    <button class="iconbtn" id="btnSettings" title="设置">⚙︎</button>
+  </div>
 </header>
 
 <div class="ctx-banner" id="ctxBanner">
@@ -269,6 +321,10 @@
     </div>
     <div id="sceneBar"></div>
     <div id="sceneTip">选一个场景，获得构图建议与推荐网格。<b>提示</b>会显示在这里。</div>
+    <div id="genBar">
+      <button id="genToggle">✨ 拍完自动生图</button>
+      <div id="genStyles"></div>
+    </div>
     <div id="shutterRow">
       <button class="side-btn" id="btnLevel"><span class="ic">🧭</span>水平仪</button>
       <button id="shutter" title="拍照"></button>
@@ -286,6 +342,13 @@
       <button class="btn primary" id="btnToPola">🤍 做拍立得</button>
       <button class="btn teal" id="btnToEdit">🎨 去修图</button>
     </div>
+  </section>
+
+  <!-- ========= AI 相册（生图队列的归档馆） ========= -->
+  <section class="view" id="view-album">
+    <div class="page-head"><h2>✨ AI 相册</h2><p>后台生图完成的作品自动归档到这里，与原片「胶卷」分开。点开可看大图 / 保存 / 删除。</p></div>
+    <div id="albumGrid"></div>
+    <div id="emptyAlbum" class="empty"><div class="big">✨</div>还没有 AI 生图<br>去「取景」拍一张，生图会在后台排队</div>
   </section>
 
   <!-- ========= 拍立得 ========= -->
@@ -364,7 +427,34 @@
   <button data-v="film"><span class="ic">🎞</span>胶卷</button>
   <button data-v="pola"><span class="ic">🤍</span>拍立得</button>
   <button data-v="edit"><span class="ic">🎨</span>修图</button>
+  <button data-v="album"><span class="ic">✨</span>AI 相册</button>
 </nav>
+
+<!-- 生图队列 -->
+<div id="queueMask"></div>
+<div id="queuePanel">
+  <div class="grab"></div>
+  <h3>✨ 生图队列</h3>
+  <p class="desc" id="queueSummary">后台生图，不打断拍照</p>
+  <div id="queueList"></div>
+  <div class="field" style="margin-top:12px">
+    <button class="mini" id="btnQueueToAlbum">看 AI 相册</button>
+    <button class="mini ghost" id="btnQueueClear">清理已结束</button>
+  </div>
+  <p class="desc" style="margin-top:10px">队列任务存在本机 IndexedDB，刷新页面后未完成的任务会自动继续。</p>
+</div>
+
+<!-- AI 相册大图 -->
+<div id="lightbox">
+  <img id="lbImg" alt="">
+  <div id="lbMeta"></div>
+  <div class="lb-actions">
+    <button class="btn" id="lbToPola">🤍 做拍立得</button>
+    <button class="btn primary" id="lbSave">保存 / 分享</button>
+    <button class="btn danger" id="lbDel">删除</button>
+  </div>
+  <button id="lbClose">✕ 关闭</button>
+</div>
 
 <div id="toast"></div>
 
@@ -379,33 +469,53 @@ function toast(msg,ms=2200){
 }
 function fmtDate(d){const p=n=>String(n).padStart(2,'0');return `'${String(d.getFullYear()).slice(2)}.${p(d.getMonth()+1)}.${p(d.getDate())}`}
 function fmtTime(d){const p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())}`}
+/* 错误信息可能来自远端服务，渲染前转义 */
+function esc(s){return (''+s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 /* ================= 安全上下文 ================= */
 if(!window.isSecureContext){ $('#ctxBanner').classList.add('show'); }
 
 /* ================= 视图切换 ================= */
-$$('nav.bottom button').forEach(b=>b.addEventListener('click',()=>{
-  $$('nav.bottom button').forEach(x=>x.classList.remove('on'));
-  $$('.view').forEach(v=>v.classList.remove('on'));
-  b.classList.add('on');
-  $('#view-'+b.dataset.v).classList.add('on');
-  if(b.dataset.v==='film') renderFilm();
-}));
+function go(v){
+  $$('nav.bottom button').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+  $$('.view').forEach(x=>x.classList.remove('on'));
+  const el=$('#view-'+v); if(el) el.classList.add('on');
+  if(v==='film') renderFilm();
+  if(v==='album') renderAlbum();
+  if(v==='cam') applyGrid();
+}
+$$('nav.bottom button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
 
 /* ================= 数据层 IndexedDB ================= */
 const DB={db:null,
   open(){return new Promise((res,rej)=>{
-    const r=indexedDB.open('snapsaga',1);
-    r.onupgradeneeded=e=>{e.target.result.createObjectStore('photos',{keyPath:'id'})};
+    const r=indexedDB.open('snapsaga',2);
+    r.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains('photos')) db.createObjectStore('photos',{keyPath:'id'});
+      if(!db.objectStoreNames.contains('queue')) db.createObjectStore('queue',{keyPath:'id'});
+    };
     r.onsuccess=e=>{DB.db=e.target.result;res()};
     r.onerror=()=>rej(r.error);
   })},
   put(rec){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').put(rec);t.oncomplete=res;t.onerror=()=>rej(t.error)})},
   all(){return new Promise((res,rej)=>{const r=DB.db.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>res(r.result.sort((a,b)=>b.ts-a.ts));r.onerror=()=>rej(r.error)})},
   del(id){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').delete(id);t.oncomplete=res;t.onerror=()=>rej(t.error)})},
-  clear(){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').clear();t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+  clear(){return new Promise((res,rej)=>{const t=DB.db.transaction('photos','readwrite');t.objectStore('photos').clear();t.oncomplete=res;t.onerror=()=>rej(t.error)})},
+  /* 生图队列：整表快照读写（任务量小，简单可靠） */
+  putTasks(list){return new Promise((res,rej)=>{
+    if(!DB.db) return res();
+    const t=DB.db.transaction('queue','readwrite'), os=t.objectStore('queue');
+    os.clear(); (list||[]).forEach(x=>os.put(x));
+    t.oncomplete=res; t.onerror=()=>rej(t.error);
+  })},
+  tasks(){return new Promise((res,rej)=>{
+    if(!DB.db) return res([]);
+    const r=DB.db.transaction('queue').objectStore('queue').getAll();
+    r.onsuccess=()=>res(r.result.sort((a,b)=>a.ts-b.ts)); r.onerror=()=>rej(r.error);
+  })}
 };
-const PHOTOS=[]; const selected=new Set();
+const PHOTOS=[]; const AI_ALBUM=[]; const selected=new Set();
 
 /* ================= 相机 ================= */
 const cam={stream:null, facing:'environment'};
@@ -426,13 +536,20 @@ async function capture(){
   $('#flash').style.opacity=.9; setTimeout(()=>$('#flash').style.opacity=0,120);
   const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
   c.getContext('2d').drawImage(v,0,0);
-  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));
-  await addPhoto(blob);
-  toast('已收进胶卷 🎞');
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));   // 唯一 await：canvas 编码（本机，毫秒级）
+  // ——— 快门路径到此为止：只做「拍下 → 存胶卷 → 入队」，绝不等待 AI ———
+  const rec=await addPhoto(blob);                                   // 另一个 await：本机 IndexedDB 写入
+  const ai=aiCreds();
+  if(genAuto&&ai.base&&ai.key){
+    GenQueue.add(rec, curGenStyle(), GEN_STRENGTH);                 // 同步入队，立即返回；生图在后台最多 4 并发
+    toast('已存胶卷 🎞 · 已加入生图队列');
+  } else if(genAuto){
+    toast('已收进胶卷 🎞 · 未配置 AI（设置里填 Base/Key），这张没入队');
+  } else toast('已收进胶卷 🎞');
 }
 async function addPhoto(blob){
   const rec={id:'p'+Date.now()+Math.random().toString(36).slice(2,6), blob, ts:Date.now()};
-  await DB.put(rec); PHOTOS.unshift(rec); renderFilm();
+  await DB.put(rec); PHOTOS.unshift(rec); renderFilm(); return rec;
 }
 
 /* ================= 网格叠加 ================= */
@@ -678,48 +795,63 @@ $('#editStrength').addEventListener('input',e=>{
   editStrength=e.target.value/100; $('#strengthVal').textContent=e.target.value+'%';
   if(editPhoto&&!aiApplied) applyLocalFilter();
 });
+/* 原始 AI 调用：只负责「发请求 → 拿回图像 Blob」，无任何 UI。
+   修图页与后台生图队列共用这一条通道（便于以后换成网关）。 */
+function aiCreds(){
+  return {
+    base:(localStorage.getItem('ss_ai_base')||'').replace(/\/+$/,''),
+    key:localStorage.getItem('ss_ai_key')||'',
+    model:localStorage.getItem('ss_ai_model')||'gpt-image-2'
+  };
+}
+function humanAiErr(e){
+  const msg=''+((e&&e.message)||e||'');
+  if(msg.includes('Failed to fetch')||msg.includes('NetworkError')) return '网络不通，或该服务不允许浏览器直连（CORS）';
+  return msg||'未知错误';
+}
+async function aiRedrawCore(srcBlob, style, strength){
+  const {base,key,model}=aiCreds();
+  if(!base||!key) throw new Error('未配置 AI：先在设置里填 API Base 和 Key（本地滤镜不受影响）');
+  const st=style||STYLES[0], sp=(strength==null?.7:strength);
+  // 送原图（不叠加本地滤镜），prompt 带 strength 语义
+  const img=await blobToImage(srcBlob);
+  const c=document.createElement('canvas'); const max=1024, sc=Math.min(1,max/Math.max(img.width,img.height));
+  c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  const pngBlob=await new Promise(r=>c.toBlob(r,'image/png'));
+  const fd=new FormData();
+  fd.append('image',pngBlob,'photo.png');
+  fd.append('prompt',`${st.prompt} Redraw strength: ${Math.round(sp*100)}%.`);
+  fd.append('model',model); fd.append('n','1'); fd.append('size','1024x1024');
+  const resp=await fetch(base+'/images/edits',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+  if(!resp.ok){
+    let m=resp.status+' '+resp.statusText;
+    try{ const j=await resp.json(); if(j.error&&j.error.message)m=j.error.message; }catch(e){}
+    throw new Error(m);
+  }
+  const j=await resp.json();
+  const d=j.data&&j.data[0]||{};
+  if(d.b64_json) return await (await fetch('data:image/png;base64,'+d.b64_json)).blob();
+  if(d.url) return await (await fetch(d.url)).blob();
+  throw new Error('响应里没有图像数据');
+}
+/* 修图页的 AI 重绘：核心调用 + 页面上的等待动画 */
 async function aiRedraw(){
   if(!editPhoto){ toast('先选一张照片'); return; }
-  const base=(localStorage.getItem('ss_ai_base')||'').replace(/\/+$/,'');
-  const key=localStorage.getItem('ss_ai_key')||'';
-  const model=localStorage.getItem('ss_ai_model')||'gpt-image-2';
-  if(!base||!key){ toast('未配置 AI：先在设置里填 API Base 和 Key（本地滤镜不受影响）',3200); openSettings(); return; }
   const st=STYLES.find(s=>s.k===editStyle);
   $('#aiBusy').classList.add('show');
   try{
-    // 送原图（不叠加本地滤镜），prompt 带 strength 语义
-    const img=await blobToImage(editPhoto.blob);
-    const c=document.createElement('canvas'); const max=1024, sc=Math.min(1,max/Math.max(img.width,img.height));
-    c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-    const pngBlob=await new Promise(r=>c.toBlob(r,'image/png'));
-    const fd=new FormData();
-    fd.append('image',pngBlob,'photo.png');
-    fd.append('prompt',`${st.prompt} Redraw strength: ${Math.round(editStrength*100)}%.`);
-    fd.append('model',model); fd.append('n','1'); fd.append('size','1024x1024');
-    const resp=await fetch(base+'/images/edits',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
-    if(!resp.ok){
-      let m=resp.status+' '+resp.statusText;
-      try{ const j=await resp.json(); if(j.error&&j.error.message)m=j.error.message; }catch(e){}
-      throw new Error(m);
-    }
-    const j=await resp.json();
-    const d=j.data&&j.data[0]||{};
-    let outBlob;
-    if(d.b64_json){ outBlob=await (await fetch('data:image/png;base64,'+d.b64_json)).blob(); }
-    else if(d.url){ outBlob=await (await fetch(d.url)).blob(); }
-    else throw new Error('响应里没有图像数据');
-    // 展示
-    editResultBlob=outBlob; aiApplied=true;
-    const out=await blobToImage(outBlob);
+    editResultBlob=await aiRedrawCore(editPhoto.blob, st, editStrength); aiApplied=true;
+    const out=await blobToImage(editResultBlob);
     const stage=$('#editStage');
     const old=stage.querySelector('#editCanvas'); if(old)old.remove();
     $('#editEmpty').style.display='none';
     out.id='editCanvas'; stage.appendChild(out);
     toast('AI 重绘完成 ✨');
   }catch(e){
-    const msg=(''+e.message).includes('Failed to fetch')?'网络不通或该服务不允许浏览器直连（CORS）':e.message;
-    toast('AI 重绘失败：'+msg,4000);
+    const c=aiCreds();
+    if(!c.base||!c.key){ toast('未配置 AI：先在设置里填 API Base 和 Key（本地滤镜不受影响）',3200); openSettings(); }
+    else toast('AI 重绘失败：'+humanAiErr(e),4000);
   }finally{ $('#aiBusy').classList.remove('show'); }
 }
 async function editSave(){
@@ -735,13 +867,15 @@ async function editSave(){
 }
 
 /* ================= 胶卷 ================= */
+let filmUrls=[];   // 当前网格每张缩略图的 objectURL，重渲染时回收，避免长时间占内存
 async function renderFilm(){
   const grid=$('#filmGrid');
+  const old=filmUrls; filmUrls=[];
   $('#emptyFilm').style.display=PHOTOS.length?'none':'flex';
   grid.innerHTML='';
   for(const p of PHOTOS){
     const cell=document.createElement('div'); cell.className='film-cell'+(selected.has(p.id)?' sel':'');
-    const url=URL.createObjectURL(p.blob);
+    const url=URL.createObjectURL(p.blob); filmUrls.push(url);
     cell.innerHTML=`<img src="${url}"><span class="ts">${fmtTime(new Date(p.ts))}</span><span class="sel-mark">✓</span>`;
     cell.addEventListener('click',()=>{
       if(selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
@@ -753,10 +887,222 @@ async function renderFilm(){
     });
     grid.appendChild(cell);
   }
-  if(!PHOTOS.length) grid.innerHTML='';
+  old.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
 }
 
 /* ================= 设置 ================= */
+/* ============ AI 生图队列 ============
+   定位：拍照不等待。快门只负责「拍下 → 存胶卷 → 入队」，生图在后台跑。
+   规则：同时最多 MAX=4 个在跑，第 5 个起排队（先入先跑），一有任务结束立即补位；
+        成功 → archiveResult 归档进 AI 相册；失败 → 标 failed 带可读错误，可单独重试，不阻塞队列；
+        队列状态持久化到 IndexedDB，刷新后未完成任务恢复继续。 */
+const GEN_STRENGTH=.7;   // 拍照自动生图的强度，与修图页默认一致
+let genAuto=localStorage.getItem('ss_gen_auto')!=='0';
+let genStyleKey=localStorage.getItem('ss_gen_style')||STYLES[0].k;
+function curGenStyle(){ return STYLES.find(s=>s.k===genStyleKey)||STYLES[0]; }
+
+const GenQueue={
+  MAX:4, HISTORY:30, items:[], active:0, epoch:0,
+  /* 入队：同步返回，绝不 await 生图 */
+  add(photo, style, strength){
+    const task={
+      id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+      photoId:(photo&&photo.id)||'', blob:(photo&&photo.blob)||null, ts:Date.now(),
+      styleKey:(style&&style.k)||'', styleName:(style&&style.n)||'',
+      strength:(strength==null?GEN_STRENGTH:strength),
+      status:'queued', error:'', tries:0, startedAt:0, endedAt:0
+    };
+    this.items.push(task);
+    this.persist(); this.pump(); this.ui();
+    return task.id;
+  },
+  queued(){ return this.items.filter(t=>t.status==='queued') },
+  running(){ return this.items.filter(t=>t.status==='running') },
+  failed(){ return this.items.filter(t=>t.status==='failed') },
+  counts(){ return {run:this.running().length, queued:this.queued().length, failed:this.failed().length, done:this.items.filter(t=>t.status==='done').length} },
+  /* 补位：只要 active<MAX 就按入队顺序（items 顺序 = FIFO）再启一个 */
+  pump(){
+    while(this.active<this.MAX){
+      const next=this.items.find(t=>t.status==='queued');
+      if(!next) break;
+      this.run(next);
+    }
+  },
+  /* 启动一个任务：同步标记 running，异步跑，不把 Promise 交给调用方（否则又变成串行等待） */
+  run(task){
+    if(task.status!=='queued') return;
+    const ep=this.epoch;
+    task.status='running'; task.startedAt=Date.now(); task.error=''; task.tries++;
+    this.active++;
+    this.persist(); this.ui();
+    (async()=>{
+      let out=null, err=null;
+      try{ out=await aiRedrawCore(task.blob, STYLES.find(s=>s.k===task.styleKey)||STYLES[0], task.strength); }
+      catch(e){ err=e; }
+      if(!err && ep===this.epoch){
+        try{ await archiveResult(task, out); }
+        catch(e){ err=e; }
+      }
+      this.active=Math.max(0,this.active-1);
+      if(ep!==this.epoch){ this.ui(); return; }   // 中途被「清空数据」，本次结果作废
+      task.endedAt=Date.now();
+      task.status=err?'failed':'done';
+      task.error=err?humanAiErr(err):'';
+      this.persist(); this.pump(); this.ui();      // 成功/失败都补位，队列不会卡住
+    })();
+  },
+  retry(id){
+    const t=this.items.find(x=>x.id===id);
+    if(!t||t.status!=='failed') return false;
+    t.status='queued'; t.error='';
+    this.persist(); this.pump(); this.ui();
+    return true;
+  },
+  drop(id){
+    const i=this.items.findIndex(x=>x.id===id);
+    if(i<0||this.items[i].status==='running') return false;
+    this.items.splice(i,1); this.persist(); this.ui(); return true;
+  },
+  clearFinished(){
+    this.items=this.items.filter(t=>t.status==='queued'||t.status==='running');
+    this.persist(); this.ui();
+  },
+  /* —— 持久化：整表快照（任务量小，简单可靠），刷新后靠 restore 继续 —— */
+  snapshot(){
+    return this.items.map(t=>({id:t.id, photoId:t.photoId, blob:t.blob, ts:t.ts,
+      styleKey:t.styleKey, styleName:t.styleName, strength:t.strength,
+      status:t.status, error:t.error, tries:t.tries, startedAt:t.startedAt, endedAt:t.endedAt}));
+  },
+  persist(){
+    if(typeof DB==='undefined'||!DB||!DB.db) return;      // stub / DB 未就绪时安静跳过
+    try{ DB.putTasks(this.snapshot()).catch(()=>{}); }catch(e){}
+  },
+  /* 页面加载恢复：running（被刷新打断）重新排队，done 不再入队，failed 保留等手动重试
+     同时把过老的历史任务剪掉，避免队列记录无限增长 */
+  restore(tasks){
+    const list=Array.isArray(tasks)?tasks.slice().sort((a,b)=>(a.ts||0)-(b.ts||0)):[];
+    this.items=list.map(t=>({
+      id:t.id, photoId:t.photoId||'', blob:t.blob||null, ts:t.ts||Date.now(),
+      styleKey:t.styleKey||'', styleName:t.styleName||'', strength:(t.strength==null?GEN_STRENGTH:t.strength),
+      status:(t.status==='running'?'queued':(t.status||'queued')),
+      error:t.error||'', tries:t.tries||0, startedAt:t.startedAt||0, endedAt:t.endedAt||0
+    })).filter(t=>t.blob);
+    const term=this.items.filter(t=>t.status==='done'||t.status==='failed');
+    if(term.length>this.HISTORY){
+      const drop=new Set(term.slice(0,term.length-this.HISTORY).map(t=>t.id));
+      this.items=this.items.filter(t=>!drop.has(t.id));
+    }
+    this.active=0;
+    this.persist(); this.pump(); this.ui();
+    return this.counts();
+  },
+  /* 「清空全部数据」时调用：让在飞的生成结果作废 */
+  reset(){ this.epoch++; this.items=[]; this.active=0; this.persist(); this.ui(); },
+  ui(){ renderQueuePanel(); }
+};
+
+/* 生图成功 → 归档进 AI 相册（与原始胶卷分开的一条记录） */
+async function archiveResult(task, outBlob){
+  if(!outBlob) throw new Error('生成结果为空');
+  const rec={
+    id:'ai'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    blob:outBlob, ts:Date.now(), kind:'ai',
+    from:task.photoId||'', style:task.styleKey||'', styleName:task.styleName||''
+  };
+  await DB.put(rec);
+  AI_ALBUM.unshift(rec);
+  renderAlbum();
+  toast('生图完成：'+(rec.styleName||'AI')+' ✨ 已归档到 AI 相册',2600);
+}
+
+/* ============ 队列面板 / 入口徽标 ============ */
+const Q_LABEL={queued:'排队中', running:'生成中', done:'已完成', failed:'失败'};
+let queueThumbs=[];   // 面板里缩略图的 objectURL，重渲染时统一回收
+function renderQueuePanel(){
+  const c=GenQueue.counts(), badge=$('#queueBadge');
+  if(badge){
+    const n=c.run+c.queued;
+    badge.textContent=n>9?'9+':String(n);
+    badge.classList.toggle('show',n>0);
+    badge.classList.toggle('hot',c.run>0);
+  }
+  const list=$('#queueList'); if(!list) return;
+  const old=queueThumbs; queueThumbs=[];   // 先建新的，渲染完再回收旧的，避免正在显示的图被提前 revoke
+  if(!GenQueue.items.length){
+    list.innerHTML='<div class="queue-empty">队列是空的<br><span>在「取景」拍一张，就会在后台排队生图（同时最多 4 个）</span></div>';
+  }else{
+    const pos=new Map(); GenQueue.queued().forEach((t,i)=>pos.set(t.id,i+1));
+    list.innerHTML=GenQueue.items.map(t=>{
+      let url='';
+      if(t.blob){ url=URL.createObjectURL(t.blob); queueThumbs.push(url); }
+      const label=t.status==='queued'?`排队中 · 第 ${pos.get(t.id)} 位`:Q_LABEL[t.status];
+      const err=(t.status==='failed'&&t.error)?`<div class="q-err">${esc(t.error)}</div>`:'';
+      let acts='';
+      if(t.status==='failed') acts=`<button class="mini q-act" data-retry="${t.id}">重试</button><button class="mini ghost q-act" data-drop="${t.id}">移除</button>`;
+      else if(t.status==='done') acts=`<button class="mini ghost q-act" data-drop="${t.id}">移除</button>`;
+      const running=t.status==='running'?' · <span class="q-dot"></span> 暗房冲洗中':'';
+      return `<div class="q-item ${t.status}">
+        ${url?`<img class="q-thumb" src="${url}" alt="">`:'<div class="q-thumb"></div>'}
+        <div class="q-main">
+          <div class="q-title">${esc(t.styleName||'AI 生图')} <span class="q-badge ${t.status}">${label}</span></div>
+          <div class="q-time">${fmtTime(new Date(t.ts))}${running}</div>
+          ${err}${acts?`<div class="q-acts">${acts}</div>`:''}
+        </div></div>`;
+    }).join('');
+    $$('#queueList [data-retry]').forEach(b=>b.addEventListener('click',()=>GenQueue.retry(b.dataset.retry)));
+    $$('#queueList [data-drop]').forEach(b=>b.addEventListener('click',()=>GenQueue.drop(b.dataset.drop)));
+  }
+  old.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
+  $('#queueSummary').textContent=`并发上限 ${GenQueue.MAX} · 生成中 ${c.run} · 排队 ${c.queued} · 已完成 ${c.done} · 失败 ${c.failed}`;
+}
+function openQueue(){ renderQueuePanel(); $('#queuePanel').classList.add('show'); $('#queueMask').classList.add('show'); }
+function closeQueue(){ $('#queuePanel').classList.remove('show'); $('#queueMask').classList.remove('show'); }
+
+/* ============ AI 相册 ============ */
+let albumUrls=[];
+async function renderAlbum(){
+  const grid=$('#albumGrid'); if(!grid) return;
+  const old=albumUrls; albumUrls=[];
+  $('#emptyAlbum').style.display=AI_ALBUM.length?'none':'flex';
+  grid.innerHTML='';
+  for(const p of AI_ALBUM){
+    const cell=document.createElement('div'); cell.className='film-cell';
+    const url=URL.createObjectURL(p.blob); albumUrls.push(url);
+    cell.innerHTML=`<img src="${url}"><span class="ts">${esc(p.styleName||'AI')} ${fmtTime(new Date(p.ts))}</span><span class="src-mark">✨</span>`;
+    cell.addEventListener('click',()=>openLightbox(p));
+    grid.appendChild(cell);
+  }
+  old.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
+}
+let lbPhoto=null, lbUrl='';
+function openLightbox(p){
+  lbPhoto=p;
+  if(lbUrl){ try{URL.revokeObjectURL(lbUrl)}catch(e){} }
+  lbUrl=URL.createObjectURL(p.blob);
+  $('#lbImg').src=lbUrl;
+  $('#lbMeta').textContent=`${p.styleName||'AI 生图'} · ${new Date(p.ts).toLocaleString()}`;
+  $('#lightbox').classList.add('show');
+}
+function closeLightbox(){
+  $('#lightbox').classList.remove('show');
+  $('#lbImg').removeAttribute('src');   // 先摘掉引用，再 revoke，避免元素指着一个已被回收的 blob URL
+  if(lbUrl){ try{URL.revokeObjectURL(lbUrl)}catch(e){} lbUrl=''; }
+  lbPhoto=null;
+}
+
+/* 拍照页的「拍完自动生图」开关 + 风格 */
+function renderGenBar(){
+  const t=$('#genToggle'), cfg=aiCreds();
+  const ready=!!(cfg.base&&cfg.key);
+  t.classList.toggle('on',genAuto&&ready);
+  t.textContent=!genAuto?'✨ 拍完不生图':(ready?'✨ 拍完自动生图':'✨ 未配置 AI');
+  $('#genStyles').classList.toggle('off',!genAuto);
+  $('#genStyles').innerHTML=STYLES.map(s=>`<button class="gen-chip ${s.k===genStyleKey?'on':''}" data-k="${s.k}">${s.n}</button>`).join('');
+  $$('#genStyles .gen-chip').forEach(b=>b.addEventListener('click',()=>{
+    genStyleKey=b.dataset.k; localStorage.setItem('ss_gen_style',genStyleKey); renderGenBar();
+  }));
+}
+
 function openSettings(){ $('#settings').classList.add('show'); $('#settingsMask').classList.add('show');
   $('#aiBase').value=localStorage.getItem('ss_ai_base')||'https://api.openai.com/v1';
   $('#aiKey').value=localStorage.getItem('ss_ai_key')||'';
@@ -783,6 +1129,7 @@ $('#btnAiSave').addEventListener('click',()=>{
   localStorage.setItem('ss_ai_base',$('#aiBase').value.trim());
   localStorage.setItem('ss_ai_key',$('#aiKey').value.trim());
   localStorage.setItem('ss_ai_model',$('#aiModel').value.trim()||'gpt-image-2');
+  renderGenBar();   // 刚配好 Key 时，取景页的「拍完自动生图」状态跟着更新
   toast('已保存到本机');
 });
 $('#btnAiTest').addEventListener('click',async()=>{
@@ -796,7 +1143,11 @@ $('#btnAiTest').addEventListener('click',async()=>{
 });
 $('#btnWipe').addEventListener('click',async()=>{
   if(!confirm('清空全部照片与设置？不可恢复')) return;
-  await DB.clear(); PHOTOS.length=0; selected.clear(); localStorage.clear(); renderFilm(); closeSettings(); toast('已清空');
+  await DB.clear(); await DB.putTasks([]);
+  PHOTOS.length=0; AI_ALBUM.length=0; selected.clear();
+  GenQueue.reset();                       // 队列与在飞的生成结果一起作废
+  localStorage.clear(); genAuto=false; genStyleKey=STYLES[0].k;
+  renderFilm(); renderAlbum(); renderGenBar(); renderQueuePanel(); closeSettings(); toast('已清空');
 });
 
 /* ================= 事件绑定与启动 ================= */
@@ -817,25 +1168,66 @@ $('#btnClearSel').addEventListener('click',()=>{selected.clear();renderFilm()});
 $('#btnToPola').addEventListener('click',async()=>{
   if(!selected.size){ toast('先在胶卷里点选照片'); return; }
   polaPhoto=PHOTOS.find(p=>p.id===[...selected][0]);
-  $$('nav.bottom button').forEach(x=>x.classList.toggle('on',x.dataset.v==='pola'));
-  $$('.view').forEach(v=>v.classList.remove('on')); $('#view-pola').classList.add('on');
+  go('pola');
   if(!$('#polaNote').value) pickNote(); else renderPola(true);
 });
 $('#btnToEdit').addEventListener('click',()=>{
   if(!selected.size){ toast('先在胶卷里点选照片'); return; }
   editPhoto=PHOTOS.find(p=>p.id===[...selected][0]);
-  $$('nav.bottom button').forEach(x=>x.classList.toggle('on',x.dataset.v==='edit'));
-  $$('.view').forEach(v=>v.classList.remove('on')); $('#view-edit').classList.add('on');
+  go('edit');
   renderStyles(); applyLocalFilter();
 });
 $('#btnEditSave').addEventListener('click',editSave);
 $('#btnEditAI').addEventListener('click',aiRedraw);
 
+/* —— 生图队列 —— */
+$('#btnQueue').addEventListener('click',openQueue);
+$('#queueMask').addEventListener('click',closeQueue);
+$('#btnQueueClear').addEventListener('click',()=>{ GenQueue.clearFinished(); toast('已清理结束的任务'); });
+$('#btnQueueToAlbum').addEventListener('click',()=>{ closeQueue(); go('album'); });
+$('#genToggle').addEventListener('click',()=>{
+  genAuto=!genAuto; localStorage.setItem('ss_gen_auto',genAuto?'1':'0'); renderGenBar();
+  toast(genAuto?'拍完自动排队生图（不打断拍照）':'已关闭自动生图');
+});
+
+/* —— AI 相册大图 —— */
+$('#lbClose').addEventListener('click',closeLightbox);
+$('#lightbox').addEventListener('click',e=>{ if(e.target.id==='lightbox') closeLightbox(); });
+$('#lbToPola').addEventListener('click',()=>{
+  if(!lbPhoto) return;
+  polaPhoto=lbPhoto; closeLightbox(); go('pola');
+  if(!$('#polaNote').value) pickNote(); else renderPola(true);
+});
+$('#lbDel').addEventListener('click',async()=>{
+  if(!lbPhoto||!confirm('删除这张 AI 生图？')) return;
+  const id=lbPhoto.id; closeLightbox();
+  await DB.del(id); const i=AI_ALBUM.findIndex(x=>x.id===id); if(i>-1) AI_ALBUM.splice(i,1);
+  renderAlbum(); toast('已删除');
+});
+$('#lbSave').addEventListener('click',async()=>{
+  if(!lbPhoto) return;
+  const isPng=(lbPhoto.blob.type||'').includes('png');
+  const file=new File([lbPhoto.blob],`snapsaga-ai-${Date.now()}.${isPng?'png':'jpg'}`,{type:lbPhoto.blob.type||'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:'拾光 AI 生图'}); return; }catch(e){}
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(lbPhoto.blob); a.download=file.name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+  toast('已保存到下载（或用分享面板存到相册）');
+});
+
 (async function init(){
   await DB.open();
-  PHOTOS.push(...await DB.all());
-  loadGeo(); renderSun(); renderScenes(); renderFilm();
+  const all=await DB.all();
+  PHOTOS.push(...all.filter(p=>p.kind!=='ai'));     // 相机原片
+  AI_ALBUM.push(...all.filter(p=>p.kind==='ai'));   // 生图归档
+  loadGeo(); renderSun(); renderScenes(); renderFilm(); renderAlbum(); renderGenBar(); renderQueuePanel();
   if(geo.lat!=null) renderSun();
+  // 队列持久化恢复：未完成（排队中/被刷新打断）自动继续调度；已完成的不重复入队
+  try{
+    const c=GenQueue.restore(await DB.tasks());
+    if(c.run+c.queued) toast(`已恢复后台生图队列：生成中 ${c.run} · 排队 ${c.queued}`,3200);
+  }catch(e){}
 })();
 </script>
 </body>
