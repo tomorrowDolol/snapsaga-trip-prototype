@@ -148,6 +148,18 @@ if (!existsSync(join(DIST, 'app.html'))) {
   check('产物里图片属性仍在（decoding=async / loading=lazy）', /decoding[:=]\s*[`"']async[`"']/.test(bundle) && /loading[:=]\s*[`"']lazy[`"']/.test(bundle));
   check('产物里有 320 / .72 缩略图规格', /\b320\b/.test(bundle) && /\.72\b/.test(bundle));
   check('PWA 文件已随构建产出（manifest + sw.js + 图标）', existsSync(join(DIST, 'manifest.webmanifest')) && existsSync(join(DIST, 'sw.js')) && existsSync(join(DIST, 'icon-512.png')));
+  // sw.js 的预缓存清单必须都是真实存在的文件：addAll 是原子的，一个 404 就会让整个预缓存失效
+  const swSrc = existsSync(join(DIST, 'sw.js')) ? read(join(DIST, 'sw.js')) : '';
+  const coreList = (swSrc.match(/const CORE = \[([\s\S]*?)\]/) || [, ''])[1]
+    .split(',')
+    .map((x) => x.trim().replace(/^'|'$/g, ''))
+    .filter(Boolean);
+  check('sw.js 预缓存清单非空', coreList.length >= 3, `${coreList.length} 项`);
+  check(
+    'sw.js 预缓存清单里每个文件在 dist 里都存在（否则 addAll 整体失败）',
+    coreList.every((r) => existsSync(join(DIST, r.replace(/^\.\//, '')))),
+    coreList.filter((r) => !existsSync(join(DIST, r.replace(/^\.\//, '')))).join(' / ') || coreList.join(' / '),
+  );
   check('产物里没有本机绝对路径', !distAll.includes(LOCAL_PATH));
   check('产物里没有内联的 API Key 形态字符串（sk- 后跟长串）', !/sk-[A-Za-z0-9]{20,}/.test(bundle));
 }

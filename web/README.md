@@ -114,7 +114,7 @@ GitHub Pages 目前**从分支直接提供、没有 CI 构建**，所以 `web/di
 |----|------|------|------|
 | 单测 | Vitest + jsdom | 53 个测试 | 队列调度（并发峰值 4 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）、缩略图尺寸与编码参数、AI Base 取值、太阳算法等价性、相机取图三环境与能力约束 |
 | 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | 75 项 | 主链路 35 / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
-| 红线 guard | node + Playwright | 59 项 | 源码侧 31 / 产物侧 16 / 产物运行时 5 / 子路径部署冒烟 7 |
+| 红线 guard | node + Playwright | 61 项 | 源码侧 31 / 产物侧 18 / 产物运行时 5 / 子路径部署冒烟 7 |
 | 构建 | tsc（严格）+ vite | — | `npm run build` 零错误 |
 
 e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check/*.cjs` 与 `ss_e2e.cjs`），
@@ -134,6 +134,8 @@ e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check
 - 未用真实 Key 打通 `api.klong.lat`（无凭证）。
 - 切后台页面被挂起的问题不变（K15）：队列只在页面活跃时推进。
 - PWA 离线缓存是保守策略（导航 network-first、静态资源 stale-while-revalidate）；首次打开仍需网络。
+  SW 的 scope 是 `/web/dist/`（sw.js 就在产物目录里），所以主屏安装后的 `start_url` 落在 scope 内、离线可用；
+  而 `/web/` 入口页本身不在 scope 内（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常）——见 iteration-log K23。
 
 ## 改哪边？
 

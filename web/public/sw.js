@@ -4,7 +4,17 @@
    - 同源静态资源（./assets/*）：stale-while-revalidate → 立即出图，后台更新
    - 其余请求（AI 生图等）一律直接放行，不缓存 */
 const CACHE = 'snapsaga-web-v1';
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+// 预缓存清单必须都是真实存在的文件（addAll 是原子的：一个 404 就全不进缓存）。
+// 入口产物叫 app.html（不是 index.html），目录地址 ./ 在 Pages 上是 404，所以不列它。
+// 带 hash 的 JS/CSS 不列在这里，首次访问时会被 stale-while-revalidate 收进缓存。
+const CORE = [
+  './app.html',
+  './manifest.webmanifest',
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png',
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -39,7 +49,7 @@ self.addEventListener('fetch', (e) => {
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
           return res;
         })
-        .catch(() => caches.match(req).then((r) => r || caches.match('./index.html'))),
+        .catch(() => caches.match(req).then((r) => r || caches.match('./app.html'))),
     );
     return;
   }

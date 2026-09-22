@@ -43,11 +43,12 @@ Zustand 5（状态）· Vitest 5 + jsdom（单测）· 手写 `public/sw.js` + `
    缩略图 13 项 / 拍照三环境 17 项 / AI 默认 Base 9 项 / 主链路 33 项 → `web/e2e/`（跑 `dist` 产物）。
    两处必要适配（换实现方式，非放宽）：objectURL 那条「revoke≈create」比例断言换成
    「重渲染 created 增量为 0」+「卸载即 revoke 且活跃数不增长」；openai 常量计数改为「HTML 0 处 + 产物 1 处」。
-6. **`npm run guard`**（59 项，学 ImgX Studio 思路）：源码侧 31 项（快门路径不含 fetch/AI await、
+6. **`npm run guard`**（61 项，学 ImgX Studio 思路）：源码侧 31 项（快门路径不含 fetch/AI await、
    `ImageCapture` 在抓帧回落之前、缩略图 320/.72、列表挂 thumb、默认 Base、无本机绝对路径…）、
-   产物侧 16 项（`base` 相对、产物里 ImageCapture/takePhoto/drawImage 都在、旧默认仅 1 处、PWA 文件已产出、
-   入口页引用的产物文件都存在…）、**产物运行时 5 项**（真 Chromium 加载 dist + 生图接口挂死 →
-   6 张照片仍全部入库、队列并发峰值仍为 4）、**子路径部署冒烟 7 项**（按 Pages 的目录形状访问 `/web/`）。
+   产物侧 18 项（`base` 相对、产物里 ImageCapture/takePhoto/drawImage 都在、旧默认仅 1 处、PWA 文件已产出、
+   `sw.js` 预缓存清单里每个文件都真实存在、入口页引用的产物文件都存在…）、**产物运行时 5 项**
+   （真 Chromium 加载 dist + 生图接口挂死 → 6 张照片仍全部入库、队列并发峰值仍为 4）、
+   **子路径部署冒烟 7 项**（按 Pages 的目录形状访问 `/web/`）。
    后两段是关键：防「源码对但构建出来不对」与「构建对但路径部署不对」。
 7. **`src/debug/bridge.ts`**：暴露 `window.__snapsaga` 与旧脚本用的只读全局名（`PHOTOS`/`DB`/`GenQueue`/`cam`…），
    使根原型那批验收脚本能对准新产物跑；视图的 id/类名与原型保持一致，DOM 形状不变。
@@ -88,9 +89,11 @@ guard 的「子路径部署冒烟」会按 Pages 的目录形状（仓库根）�
 |------|------|------|
 | TS 严格模式 + 构建 | `npm run build` | PASS：`tsc --noEmit` 零错误，vite 产物 442 ms |
 | 单测（Vitest + jsdom） | `npm test` | PASS：**5 文件 / 53 测试**（队列调度 18 条对应断言 + 持久化恢复、缩略图尺寸与编码、AI Base 取值、太阳算法四城市等价、相机三环境与能力约束） |
-| 红线 guard | `npm run guard` | PASS：**59 项**（源码 31 / 产物 16 / 产物运行时 5 / 子路径部署冒烟 7） |
+| 红线 guard | `npm run guard` | PASS：**61 项**（源码 31 / 产物 18 / 产物运行时 5 / 子路径部署冒烟 7） |
 | 验收 e2e（真 Chromium + 真 IndexedDB） | `npm run e2e` | PASS：**75 项**（主链路 35 / 缩略图 13 / 拍照 17 / AI Base 10），4/4 组通过 |
 | 线上原型未被触碰 | `git diff --stat main -- index.html` | 无改动（根原型仍是 v0.6） |
+| PWA 离线 | Playwright：首次访问注册 SW → 受控后 `setOffline(true)` 再 reload | PASS：SW scope `/`（本地按 dist 为根），离线 reload 返回 200 且取景页正常渲染 |
+| 线上冒烟（真浏览器打开 Pages） | `…/web/` + 相机 stub + 生图接口挂死 | PASS：页面零错误、零 4xx/5xx；3 连拍 → 胶卷 3 张 + 队列 3 条（生成中 3，接口挂死也没挡住快门） |
 | 视觉对齐 | Playwright 截图对比（移动 390×780 / 桌面 1280×800：取景/胶卷/拍立得/修图/相册/设置/队列） | 与原型逐屏一致，仅两处**改善**：打开相机后网格立即出现（原型要先切一次视图才出现）、拍立得未选图时提示文案更明确 |
 | 未覆盖 | — | **真机相机路径仍未在 CI 里跑**（e2e 只有 canvas 流 + ImageCapture stub）；未用真实 Key 打通 `api.klong.lat`；未在 iOS Safari 上实测新应用 |
 
@@ -101,6 +104,7 @@ guard 的「子路径部署冒烟」会按 Pages 的目录形状（仓库根）�
 | K19 | **`web/dist` 必须提交进仓库**：Pages 目前从分支直接提供、没有 CI，不提交产物线上就拿不到新版本 | 每次改前端都要 build 一次并把产物一起提交，产物 diff 进 git 历史 | 把 Pages 源切成 GitHub Actions（build → upload-pages-artifact）后，即可在 `web/.gitignore` 里加上 `dist/`。权衡已写在 `web/README.md` |
 | K20 | 现在有**两套实现**（根 `index.html` 与 `web/`），同一功能改两边会漂移；只有太阳算法有数值等价性测试守着 | 根原型的后续改动不会自动出现在 web 版（反之亦然） | 功能演进只改 `web/`（有测试 + guard），根原型冻结；若必须两边同改，先改 `web/` 再同步并跑 `npm run verify` |
 | K21 | 旧验收脚本（`snapsaga_queue_check/*.cjs`、`ss_e2e.cjs`）依赖页面全局（`PHOTOS`/`DB`/`GenQueue`/`cam`…），新应用靠 `src/debug/bridge.ts` 提供只读兼容层才能跑 | 删掉 bridge 就会让那批脚本失效（`web/e2e/` 已内化同样断言，不受影响） | 保留 bridge（零成本、便于线上排查）；新验收一律写在 `web/e2e/` |
+| K23 | **PWA 的 SW scope 是 `/web/dist/`**（sw.js 就在产物目录里），所以安装到主屏后的 `start_url`（由 manifest 相对解析）落在 scope 内、离线可用；而 `/web/` 那个入口页本身不受 SW 控制（离线刷新 `/web/` 会失败，`/web/dist/app.html` 正常） | 离线只覆盖产物目录 | 若要连 `/web/` 一起离线，需把 sw.js 放到 `web/` 根（即再拆一层构建步骤）；当前安装路径（主屏图标 → `/web/dist/`）已满足离线需求 |
 | K22 | e2e 里相机仍是 canvas 流 + `ImageCapture` stub；真机 `takePhoto` 的分辨率提升、iPhone 真实能力清单都不在 CI 覆盖内（延续 K12/K13/K14） | 真机行为仍可能与本机不一致（历史教训：v0.4 曾误判 iOS 不支持 takePhoto） | 出游实测时用 `tools/ios-probe.html` + 新应用的取景信息条（会显示实际分辨率与本次是静止图像还是抓帧）复测 |
 
 另外：**K1（无 Service Worker）/ K4（无 manifest 与图标）在 `web/` 版本已解决**
