@@ -195,6 +195,12 @@ function extractFn(src, header) {
     /drawImage\(v,0,0\)/.test(grabStill) && /kind:'frame'/.test(grabStill));
   check('grabStill() 里没有任何 AI / 网络调用',
     !/fetch\(|aiRedrawCore|GenQueue/.test(grabStill));
+  check('grabStill() 只对设备真正支持的能力下约束',
+    /getCapabilities/.test(grabStill) || /getCapabilities/.test(html));
+  check('camTune() 按 getCapabilities 逐项判断，不硬下 focusMode',
+    /getCapabilities/.test(html) && /supports\('focusMode'/.test(html));
+  check('启动时主动申请持久存储（persist）',
+    /navigator\.storage\.persist\(\)/.test(html) && /ensurePersist\(\);/.test(html));
   check('两条取图路都只产出 Blob（kind 标记 still/frame）',
     /kind:'still'/.test(grabStill) && /kind:'frame'/.test(grabStill));
   check('addPhoto() 只写本机 IndexedDB，不碰 AI', !/fetch\(|aiRedrawCore|GenQueue/.test(addPhoto));

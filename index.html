@@ -293,7 +293,7 @@
 <header class="app">
   <div>
     <div class="logo">拾光<em>·</em>SnapSaga</div>
-    <div class="sub">TRIP PROTOTYPE v0.4</div>
+    <div class="sub">TRIP PROTOTYPE v0.5</div>
   </div>
   <div class="right">
     <button class="iconbtn" id="btnQueue" title="生图队列">✨<span class="badge" id="queueBadge">0</span></button>
@@ -526,7 +526,7 @@ const DB={db:null,
 const PHOTOS=[]; const AI_ALBUM=[]; const selected=new Set();
 
 /* ================= 相机 ================= */
-const cam={stream:null, facing:'environment', mode:'frame', res:'', lastShot:'', still:('ImageCapture' in window)};
+const cam={stream:null, facing:'environment', mode:'frame', res:'', lastShot:'', still:('ImageCapture' in window), caps:{}};
 function camMeta(){
   const el=$('#camMeta'); if(!el) return;
   if(!cam.res){ el.style.display='none'; return; }
@@ -537,14 +537,35 @@ function camMeta(){
 /* 分辨率与对焦：逐项 try，任一项不被支持不能拖累其它项 */
 async function camTune(){
   const t=cam.stream&&cam.stream.getVideoTracks()[0]; if(!t) return;
-  for(const adv of [{width:{ideal:3840},height:{ideal:2160}},{focusMode:'continuous'}]){
-    try{ await t.applyConstraints({advanced:[adv]}); }catch(e){}
+  // 只对设备真的支持的能力下约束：不支持却硬下会白白报错，还会掩盖真实原因
+  let caps={};
+  try{ caps=t.getCapabilities?t.getCapabilities():{}; }catch(e){}
+  const supports=(k,mode)=>{
+    const v=caps[k];
+    return Array.isArray(v)?v.includes(mode):!!v;
+  };
+  const want=[];
+  if(caps.width&&caps.height) want.push({width:{ideal:3840},height:{ideal:2160}});
+  if(supports('focusMode','continuous')) want.push({focusMode:'continuous'});
+  if(supports('whiteBalanceMode','continuous')) want.push({whiteBalanceMode:'continuous'});
+  for(const c of want){
+    try{ await t.applyConstraints({advanced:[c]}); }catch(e){}
   }
+  cam.caps=caps;
   try{
     const s=t.getSettings()||{};
     if(s.width&&s.height) cam.res=`相机 ${s.width}×${s.height}`;
   }catch(e){}
   camMeta();
+}
+/* 照片全存在 IndexedDB；能请求持久存储就请求，减少被系统回收的风险（失败静默） */
+async function ensurePersist(){
+  try{
+    if(!(navigator.storage&&navigator.storage.persist)) return;
+    const already=await navigator.storage.persisted();
+    const ok=already||await navigator.storage.persist();
+    console.info('[SnapSaga] 持久存储:', already?'已是':(ok?'已授权':'未授权'));
+  }catch(e){}
 }
 async function camStart(){
   try{
@@ -1275,6 +1296,7 @@ $('#lbSave').addEventListener('click',async()=>{
   AI_ALBUM.push(...all.filter(p=>p.kind==='ai'));   // 生图归档
   loadGeo(); renderSun(); renderScenes(); renderFilm(); renderAlbum(); renderGenBar(); renderQueuePanel();
   if(geo.lat!=null) renderSun();
+  ensurePersist();   // 照片都在 IndexedDB，能申请持久存储就申请
   // 队列持久化恢复：未完成（排队中/被刷新打断）自动继续调度；已完成的不重复入队
   try{
     const c=GenQueue.restore(await DB.tasks());

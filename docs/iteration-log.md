@@ -4,6 +4,51 @@
 
 ---
 
+## v0.5 — 2026-09-22（真机实测回归：iOS 也能真拍照 + 按能力下约束 + 主动申请持久存储）
+
+### 背景
+
+用 `tools/ios-probe.html` 在真机 **iPhone（iOS 26.6，Safari）** 上实测一轮，推翻了 v0.4 里一条错误预设，并拿到两条对架构有决定性影响的事实。
+
+### 真机实测结果（iPhone / iOS 26.6 / HTTPS）
+
+| 项目 | 实测 |
+|------|------|
+| **`ImageCapture.takePhoto`** | **存在且成功**（v0.4 曾假设 iOS 不支持，**该假设已推翻**） |
+| 后摄真拍照 / 抓帧 | **3 106 140 B / 554 689 B** → 真拍照数据量约 **5.6×** |
+| 前摄真拍照 / 抓帧 | **3 809 768 B / 1 180 675 B** |
+| 预览分辨率 | 1440×2560（竖屏，即 2560×1440，与请求的 ideal 一致） |
+| 相机可控项 | aspectRatio / backgroundBlur / deviceId / facingMode / **focusDistance** / frameRate / height / **torch** / **whiteBalanceMode** / width / **zoom**（**无 focusMode**） |
+| IndexedDB | 可写可读（含 Blob） |
+| `storage.persist()` | API 存在，初始为**未持久**（配额 9830 MB） |
+| **切后台** | 计时器**被挂起，最长 51.5 s 没跳** → 后台生图会暂停 |
+| Web Share | 支持（含带文件 → 存相册/分享路径可用） |
+| 不支持 | Web Bluetooth / 屏幕方向锁定 / 震动；Notification、Web Push 在**浏览器标签页**下不支持（需「加到主屏」后再复测） |
+
+### 改动点
+
+1. **`camTune()` 改为按能力下约束**：先读 `getCapabilities()`，只对设备真的支持的项调 `applyConstraints`（宽高、连续对焦、连续白平衡）。此前无条件试试 `focusMode:'continuous'`，而 iPhone 根本没有 focusMode——硬下只会白白报错并掩盖真实原因。
+2. **主动申请持久存储**：新增 `ensurePersist()`，`init()` 时调 `navigator.storage.persist()`（已是则跳过，失败静默，结果进 console）。照片全在 IndexedDB，不能等系统回收了才发现。
+3. `cam.caps` 缓存能力清单，供后续做手电/变焦控件（iPhone 与安卓均报告支持 `torch` / `zoom`）。
+
+### 验证情况
+
+| 项目 | 命令 | 结果 |
+|------|------|------|
+| HTML 结构 / JS 语法 | `python3 html.parser` / `node --check` | PASS |
+| 按能力下约束（stub track 报告仅有 zoom/torch） | `node check_capture.cjs <repo>` | PASS：绝不向不支持的能力下约束；支持项才下发 |
+| 拍照三环境（真拍照 / 回落 / 无 API） | 同上 | PASS 全部通过 |
+| 队列调度（用户脚本，未改一字） | `node check_queue.mjs <index.html>` | PASS 全部 18 项 |
+| 队列 + 持久化 + 快门静态检查（仓库内） | `node tools/check_gen_queue.mjs` | PASS |
+| 端到端浏览器 | Playwright `ss_e2e.cjs` | PASS |
+| 真机实测 | `tools/ios-probe.html` @ iPhone iOS 26.6 | 见上表；已由用户粘贴报告确认 |
+
+### 已知问题与限制
+
+- 更正 K12；新增 K15 / K16。
+
+---
+
 ## v0.4 — 2026-09-22（真拍照：优先静止图像管线，失败回落抓帧）
 
 ### 背景
@@ -124,11 +169,13 @@ v0.1 的生图（AI 重绘）是「点一下 → 全屏等待 20–60s」，与�
 | K9 | 生成中刷新页面 → 该任务重新排队，服务端可能已经出了一张图，属于重复生成（多花钱） | 极端情况多花一次生图费用 | 正式版用内容 hash 做幂等键（见 p0-plan A4）；原型接受 |
 | K10 | 大量快速重渲染时，被提前 revoke 的缩略图会产生 `net::ERR_FILE_NOT_FOUND` 控制台噪声（实测 0 次元素仍在 DOM 的加载失败，纯噪声） | 仅控制台噪声 | 若以后觉得吵，改成延迟 ~1s 回收旧批次 |
 | K11 | 用户显式保存过「既不是旧默认、也不是新默认」的自定义 Base 时不会被覆盖（含自建网关）；而保存值**恰好等于旧默认** `https://api.openai.com/v1` 的浏览器会被切到新默认（无法区分「随手沿用默认」与「手打 openai」，按后者更少见处理） | 想故意继续用 openai 官方地址的人需在设置里重新填一次 | 预期行为（不覆盖用户显式配置）；若需要统一，后续加「重置为默认」按钮 |
-| K12 | iOS Safari（及部分 Android WebView）不提供 `ImageCapture.takePhoto`，这些环境仍走抓帧，画质受预览分辨率限制 | iPhone 用户体验不到本版收益 | 原型可选用 `<input type="file" capture>` 调系统相机（会离开页面，与队列交互需再设计）；根治在正式版原生相机（p0-plan B1） |
+| K12 | `ImageCapture.takePhoto` 的支持**按浏览器/版本而异**：iOS 26.6 Safari **实测支持**（真照约 3.1–3.8 MB，为抓帧的 5.6×）；更旧的 iOS 版本及其他 WebView 未逐一验证 | 旧设备仍可能只拿到抓帧 | 已改为**运行时能力探测 + 一次性回落**，不按 UA 判断；取景信息条如实显示本机走的是哪条路 |
 | K13 | `takePhoto()` 在部分设备/视频流上会失败（已自动回落抓帧并把 `cam.still` 置 false，本次会话不重试）；降级只在取景信息条可见 | 用户可能不知道这张图是抓帧 | 可考虑首次降级时弹一次提示；正式版相机拿回完整控制后自然消失 |
 | K14 | `applyConstraints` 的 3840×2160 只是「理想值」，实际分辨率由设备决定；部分设备不支持 `focusMode:'continuous'`，失败静默 | 提升幅度因机而异 | 信息条已如实显示实际分辨率；真机实测后再决定是否需要降级策略 |
+| K15 | **切后台/锁屏时页面被挂起**（iPhone iOS 26.6 实测：计时器最长 51.5 s 未跳）→ 队列只在页面活跃时推进，「后台生图」实际含义是「不挡拍照」，不是「切走还在跑」 | 切到相机 App 拍照期间，队列会暂停；回前台后自动补跑 | 已实现回前台自动续跑；**根治要把生图改成「服务端任务 + 轮询」**（ImgX Studio 的 ADR 0002 统一异步 正是这个形状），这样挂起也不影响服务端生成 |
+| K16 | 浏览器标签页下 iOS 不支持 Notification / Web Push（需先「添加到主屏」为 standalone 才可能出现）；屏幕方向锁定、震动 iOS 一直不提供 | 想推送提醒/锁屏体验会失望 | 需要时先把页面加到主屏再复测（`tools/ios-probe.html` 可直接重跑）；推送不是当前必需 |
 
-### v0.5 候选（按优先级，原列为 v0.4 候选，v0.4 只做了真拍照，故整体顺延）
+### v0.6 候选（按优先级，原列为 v0.5 候选，v0.5 只做了真机实测回归，故整体顺延）
 
 1. 出游实测反馈修复（真实手机 + 真实 Key 跑一轮生图队列）
 2. K5/K8：缩略图与原图上限管理，队列快照只存 photoId
