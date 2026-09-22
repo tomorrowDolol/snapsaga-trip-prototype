@@ -88,6 +88,10 @@ v0.7 把原型功能搬进 `web/` 后，产品重心从「拍照工具」移到�
   **K26**（无缝融合是启发式）、**K27**（设置是抽屉而非独立页）、**K28**（主题产出参数不可编辑）。
 - 未变的旧条目：K2（长按删除）、K5（原图上限）、K8（快照存 blob）、K15（切后台挂起）、K17/K18（缩略图）、
   K20（两套实现）、K21（旧脚本依赖 bridge）、K22（真机相机）、K23（SW scope）、K3/K6/K9/K10/K11/K16（设计内取舍）。
+- 一处**已知的文档瑕疵（没修）**：CI 里那一步的显示名仍是「单测（53 项，jsdom）」（命令是 `npm test`，
+  实际跑 149 项）。改它要动 `.github/workflows/deploy-pages.yml`，而本机 git 凭证的 OAuth App 没有
+  `workflow` scope，推送被 GitHub 拒绝（`refusing to allow an OAuth App to create or update workflow`）。
+  需要给凭证补 scope（或由有权限的人改一行）后才能顺手修掉；不影响门禁行为。
 
 ## v0.7 · 工程化迁移（React 19 + TS + Vite，功能对齐 + 真测试 + 红线 guard）
 
