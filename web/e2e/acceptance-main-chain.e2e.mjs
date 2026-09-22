@@ -136,7 +136,7 @@ page.on('console', (m) => {
 });
 await page.addInitScript(init);
 
-const URL_APP = `${server.url}/index.html`;
+const URL_APP = `${server.url}/app.html`;
 const shot = async (n = 1, gap = 120) => {
   for (let i = 0; i < n; i++) {
     await page.click('#shutter');

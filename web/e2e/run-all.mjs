@@ -12,8 +12,8 @@ import { existsSync } from 'node:fs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(HERE, '..', 'dist');
 
-if (!existsSync(resolve(DIST, 'index.html'))) {
-  console.error('dist/index.html 不存在：先跑 npm run build');
+if (!existsSync(resolve(DIST, 'app.html'))) {
+  console.error('dist/app.html 不存在：先跑 npm run build');
   process.exit(1);
 }
 

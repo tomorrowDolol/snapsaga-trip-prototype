@@ -6,7 +6,7 @@
   "description": "拾光 SnapSaga 出行原型 · 工程化版本（React + TS + Vite），与根目录单文件原型同源同数据",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/publish-entry.mjs",
     "preview": "vite preview --port 4173",
     "test": "vitest run",
     "test:watch": "vitest",

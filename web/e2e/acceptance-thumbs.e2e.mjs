@@ -66,7 +66,7 @@ page.on('pageerror', (e) => console.log('  [pageerror]', e.message));
 await page.addInitScript(CAM_STUB);
 
 try {
-  await page.goto(`${server.url}/index.html`);
+  await page.goto(`${server.url}/app.html`);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await sleep(400);

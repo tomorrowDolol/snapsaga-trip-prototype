@@ -73,7 +73,7 @@ async function open({ withImageCapture, takePhotoFails, camStub }) {
     },
     { withImageCapture, takePhotoFails, STILL_BYTES },
   );
-  await page.goto(`${server.url}/index.html`);
+  await page.goto(`${server.url}/app.html`);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await sleep(400);

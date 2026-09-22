@@ -34,7 +34,7 @@ const browser = await pw.chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('  [pageerror]', e.message));
-const url = `${server.url}/index.html`;
+const url = `${server.url}/app.html`;
 
 try {
   console.log('\n[1] 全新用户（localStorage 全空）');

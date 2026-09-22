@@ -43,17 +43,32 @@ Zustand 5（状态）· Vitest 5 + jsdom（单测）· 手写 `public/sw.js` + `
    缩略图 13 项 / 拍照三环境 17 项 / AI 默认 Base 9 项 / 主链路 33 项 → `web/e2e/`（跑 `dist` 产物）。
    两处必要适配（换实现方式，非放宽）：objectURL 那条「revoke≈create」比例断言换成
    「重渲染 created 增量为 0」+「卸载即 revoke 且活跃数不增长」；openai 常量计数改为「HTML 0 处 + 产物 1 处」。
-6. **`npm run guard`**（47 项，学 ImgX Studio 思路）：源码侧 31 项（快门路径不含 fetch/AI await、
+6. **`npm run guard`**（59 项，学 ImgX Studio 思路）：源码侧 31 项（快门路径不含 fetch/AI await、
    `ImageCapture` 在抓帧回落之前、缩略图 320/.72、列表挂 thumb、默认 Base、无本机绝对路径…）、
-   产物侧 11 项（`base` 相对、产物里 ImageCapture/takePhoto/drawImage 都在、旧默认仅 1 处、PWA 文件已产出…）、
-   **产物运行时 5 项**（真 Chromium 加载 dist + 生图接口挂死 → 6 张照片仍全部入库、队列并发峰值仍为 4）。
-   最后一段是关键：防「源码对但构建出来不对」。
+   产物侧 16 项（`base` 相对、产物里 ImageCapture/takePhoto/drawImage 都在、旧默认仅 1 处、PWA 文件已产出、
+   入口页引用的产物文件都存在…）、**产物运行时 5 项**（真 Chromium 加载 dist + 生图接口挂死 →
+   6 张照片仍全部入库、队列并发峰值仍为 4）、**子路径部署冒烟 7 项**（按 Pages 的目录形状访问 `/web/`）。
+   后两段是关键：防「源码对但构建出来不对」与「构建对但路径部署不对」。
 7. **`src/debug/bridge.ts`**：暴露 `window.__snapsaga` 与旧脚本用的只读全局名（`PHOTOS`/`DB`/`GenQueue`/`cam`…），
    使根原型那批验收脚本能对准新产物跑；视图的 id/类名与原型保持一致，DOM 形状不变。
 8. **文档**：新增 `web/README.md`（结构/命令/数据兼容/部署权衡/未覆盖项）；`AGENTS.md` 铁律 1 下补例外说明；
    根 `README.md` 增加 web 入口与目录。
 9. **PWA**：`public/sw.js`（导航 network-first、静态资源 stale-while-revalidate，跨域生图请求不缓存）
    + `manifest.webmanifest` + SVG/PNG 图标（`scripts/make-icons.mjs` 可重新生成）。
+
+### 部署形状（踩到过一次坑，记下来）
+
+第一次推送后 `…/web/` 返回 200 但资源全 404：GitHub Pages 请求目录只会找 `index.html`，
+而 Vite 的源入口叫 `web/index.html`、产物在 `web/dist/`，两者对不上。修正后的形状：
+
+| 文件 | 角色 |
+|------|------|
+| `web/app.html` | Vite **源入口**（产物 `dist/app.html`）；故意不叫 index.html，否则产物会盖掉它 |
+| `web/dist/**` | 构建产物（**提交**） |
+| `web/index.html` | **构建生成**的入口页，把产物引用改写成 `./dist/…`；`…/web/` 就是它（也要提交） |
+
+所以改动前端后必须 `npm run build`，它会同时刷新 `dist/` 与 `web/index.html`。
+guard 的「子路径部署冒烟」会按 Pages 的目录形状（仓库根）真实访问 `/web/`，路径再错就会当场红。
 
 ### 实测数字
 
@@ -73,7 +88,7 @@ Zustand 5（状态）· Vitest 5 + jsdom（单测）· 手写 `public/sw.js` + `
 |------|------|------|
 | TS 严格模式 + 构建 | `npm run build` | PASS：`tsc --noEmit` 零错误，vite 产物 442 ms |
 | 单测（Vitest + jsdom） | `npm test` | PASS：**5 文件 / 53 测试**（队列调度 18 条对应断言 + 持久化恢复、缩略图尺寸与编码、AI Base 取值、太阳算法四城市等价、相机三环境与能力约束） |
-| 红线 guard | `npm run guard` | PASS：**47 项**（源码 31 / 产物 11 / 产物运行时 5） |
+| 红线 guard | `npm run guard` | PASS：**59 项**（源码 31 / 产物 16 / 产物运行时 5 / 子路径部署冒烟 7） |
 | 验收 e2e（真 Chromium + 真 IndexedDB） | `npm run e2e` | PASS：**75 项**（主链路 35 / 缩略图 13 / 拍照 17 / AI Base 10），4/4 组通过 |
 | 线上原型未被触碰 | `git diff --stat main -- index.html` | 无改动（根原型仍是 v0.6） |
 | 视觉对齐 | Playwright 截图对比（移动 390×780 / 桌面 1280×800：取景/胶卷/拍立得/修图/相册/设置/队列） | 与原型逐屏一致，仅两处**改善**：打开相机后网格立即出现（原型要先切一次视图才出现）、拍立得未选图时提示文案更明确 |

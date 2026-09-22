@@ -17,7 +17,8 @@ Vite 必须 `base: './'`：线上是 `/snapsaga-trip-prototype/web/` 子路径�
 
 ```
 web/
-├── index.html                 # Vite 入口（只有 #root 与 <script type=module>）
+├── app.html                   # Vite 源入口（只有 #root 与 <script type=module>）；故意不叫 index.html
+├── index.html                 # 构建生成的入口页（引用 ./dist/ 产物）——Pages 的 /web/ 就是它，也要提交
 ├── package.json               # 依赖与命令（dev / build / test / guard / e2e / verify）
 ├── vite.config.ts             # base './' + react + tailwind + vitest(jsdom)
 ├── tsconfig.json              # 严格模式，零错误才允许 build
@@ -46,7 +47,7 @@ web/
 │   ├── debug/bridge.ts        # window.__snapsaga + 兼容旧脚本的全局名（只读）
 │   └── test/                  # Vitest（jsdom）单测
 ├── e2e/                       # Playwright 验收脚本（跑 dist 产物）
-├── scripts/                   # guard.mjs（红线）/ make-icons.mjs
+├── scripts/                   # guard.mjs（红线）/ publish-entry.mjs（生成 index.html）/ make-icons.mjs
 └── tools/                     # 零依赖：playwright 解析 + 静态服务器
 ```
 
@@ -55,7 +56,7 @@ web/
 ```bash
 npm install
 npm run dev        # 本地开发（localhost 可绕过 HTTPS 限制测相机）
-npm run build      # tsc --noEmit && vite build → dist/（TS 严格模式零错误才通过）
+npm run build      # tsc --noEmit && vite build && 生成 web/index.html（TS 严格模式零错误才通过）
 npm test           # Vitest + jsdom：队列调度 / 缩略图 / AI Base / 太阳算法等价性 / 相机取图
 npm run guard      # 红线断言：源码侧 + 构建产物侧 + 产物运行时（真 Chromium 加载 dist）
 npm run e2e        # Playwright 四组验收（需要先 build）
@@ -81,14 +82,31 @@ npm run verify     # build → test → guard → e2e 一条龙
 
 ## 部署（以及一个要写清楚的权衡）
 
-GitHub Pages 目前**从分支直接提供、没有 CI 构建**，所以 `web/dist/` 是**提交进仓库**的：
+### 目录形状：为什么有 app.html 和 index.html 两个 HTML
+
+GitHub Pages 请求目录时只会找 `index.html`，而 Vite 的源入口如果就叫 `web/index.html`，
+构建产物又会盖掉它。所以：
+
+| 文件 | 角色 |
+|------|------|
+| `web/app.html` | Vite **源入口**（产物 `dist/app.html`）—— 改界面改这里 |
+| `web/dist/**` | 构建产物（**提交**） |
+| `web/index.html` | `npm run build` **生成**的入口页（把引用改写成 `./dist/…`），`…/web/` 就是它（**提交，不要手改**） |
+
+于是 `/web/` 与 `/web/dist/app.html` 都能打开应用；Service Worker 的路径由页面里的
+`<link rel=manifest>` 反推（`sw.js` 在 manifest 旁边），两种入口都能拿到正确 scope。
+
+### dist 要提交：权衡写清楚
+
+GitHub Pages 目前**从分支直接提供、没有 CI 构建**，所以 `web/dist/` 与生成的 `web/index.html`
+是**提交进仓库**的：
 
 - ✅ 好处：push 到 main 约 1 分钟后线上就是最新产物，零 CI 依赖
-- ❌ 代价：每次改前端都要「build 一次 → 把 dist 一起提交」，产物 diff 会进 git 历史
+- ❌ 代价：每次改前端都要「build 一次 → 把 dist 与 index.html 一起提交」，产物 diff 会进 git 历史
 - ⏭ 以后可以把 Pages 源切成 **GitHub Actions**（build 后 upload-pages-artifact），
-  那时就可以在 `web/.gitignore` 里加上 `dist/`，把产物从仓库里拿掉
+  那时就可以在 `web/.gitignore` 里加上 `dist/` 与 `index.html`，把产物从仓库里拿掉
 
-`web/.gitignore` 只忽略 `node_modules` 等，**故意不忽略 `dist`**。
+`web/.gitignore` 只忽略 `node_modules` 等，**故意不忽略 `dist` 与 `index.html`**。
 
 ## 验证矩阵（`npm run verify`）
 
@@ -96,7 +114,7 @@ GitHub Pages 目前**从分支直接提供、没有 CI 构建**，所以 `web/di
 |----|------|------|------|
 | 单测 | Vitest + jsdom | 53 个测试 | 队列调度（并发峰值 4 / FIFO / 失败隔离重试 / 归档 / 刷新恢复）、缩略图尺寸与编码参数、AI Base 取值、太阳算法等价性、相机取图三环境与能力约束 |
 | 验收 e2e | Playwright（真 Chromium + 真 IndexedDB，只 stub 相机与生图接口） | 75 项 | 主链路 35 / 缩略图与增量 13 / 拍照三环境与能力约束 17 / AI 默认 Base 10 |
-| 红线 guard | node + Playwright | 47 项 | 源码侧 31 / 产物侧 11 / 产物运行时 5 |
+| 红线 guard | node + Playwright | 59 项 | 源码侧 31 / 产物侧 16 / 产物运行时 5 / 子路径部署冒烟 7 |
 | 构建 | tsc（严格）+ vite | — | `npm run build` 零错误 |
 
 e2e 与 guard 的断言来自根原型的验收脚本（`../snapsaga_queue_check/*.cjs` 与 `ss_e2e.cjs`），

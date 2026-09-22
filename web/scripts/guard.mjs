@@ -114,15 +114,32 @@ check('源码 / 静态资源里没有本机绝对路径', srcFiles.every((f) => 
 
 /* ================= [2] 构建产物侧红线 ================= */
 section('[2] 构建产物侧红线');
-if (!existsSync(join(DIST, 'index.html'))) {
+if (!existsSync(join(DIST, 'app.html'))) {
   check('dist 已构建（先跑 npm run build）', false);
 } else {
-  const distHtml = read(join(DIST, 'index.html'));
+  const distHtml = read(join(DIST, 'app.html'));
   const bundles = walk(join(DIST, 'assets'), ['.js']);
   const bundle = bundles.map(read).join('\n');
   const distAll = walk(DIST, null).map(read).join('\n');
 
   check('base 是相对的（子路径部署不会 404）', /src="\.\/assets\//.test(distHtml) && !/src="\/assets\//.test(distHtml));
+  // Pages 请求 …/web/ 只会找 web/index.html，它是构建生成的入口页（引用 ./dist/ 里的产物）
+  const launcherPath = join(ROOT, 'index.html');
+  if (existsSync(launcherPath)) {
+    const launcher = read(launcherPath);
+    const refs = [...launcher.matchAll(/(?:href|src)="(\.\/dist\/[^"]+)"/g)].map((m) => m[1]);
+    check('web/index.html 存在且指向 ./dist/ 产物', refs.length >= 2, `${refs.length} 个引用`);
+    check(
+      'web/index.html 引用的产物文件都存在（不会线上 404）',
+      refs.every((r) => existsSync(join(ROOT, r.replace(/^\.\//, '')))),
+      refs.slice(0, 3).join(' / '),
+    );
+    check('web/index.html 是构建生成的（带 don\'t-edit 提示）', /由 npm run build 生成/.test(launcher));
+    check('web/index.html 也引用了 manifest（PWA 在 /web/ 下生效）', /\.\/dist\/manifest\.webmanifest/.test(launcher));
+  } else {
+    check('web/index.html 存在（Pages 的 /web/ 入口，先跑 npm run build）', false);
+  }
+  check('产物入口是 app.html（源入口不为 index.html 让路）', existsSync(join(DIST, 'app.html')));
   check('产物里有 ImageCapture 与 takePhoto', /ImageCapture/.test(bundle) && /takePhoto/.test(bundle));
   check('产物里有抓帧回落（drawImage）', /drawImage/.test(bundle));
   check('产物里默认 Base 正确', /api\.klong\.lat\/v1/.test(bundle));
@@ -176,7 +193,7 @@ if (!pw) {
     localStorage.setItem('ss_ai_key', 'sk-guard');
   });
   try {
-    await page.goto(`${server.url}/index.html`);
+    await page.goto(`${server.url}/app.html`);
     await page.waitForTimeout(500);
     await page.click('#startCam');
     await page.waitForFunction(() => document.querySelector('#video').videoWidth > 0, null, { timeout: 8000 });
@@ -206,6 +223,47 @@ if (!pw) {
     check('产物里的并发上限仍是 4', st.peak === 4 && st.running === 4, `peak=${st.peak} running=${st.running}`);
   } catch (e) {
     check('运行时断言执行成功', false, e.message);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
+
+/* ================= [4] 子路径部署冒烟（模拟 GitHub Pages 的 /web/） ================= */
+section('[4] 子路径部署冒烟：按 Pages 的目录形状（仓库根）访问 /web/');
+if (!pw) {
+  console.log('  SKIP  本机没有 playwright，跳过部署冒烟');
+} else {
+  const repoRoot = resolve(ROOT, '..');
+  const server = await serveDir(repoRoot, Number(process.env.SS_PAGES_PORT || 8166));
+  const browser = await pw.chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 780 } });
+  const bad = [];
+  const pageErrors = [];
+  page.on('response', (r) => {
+    if (r.status() >= 400) bad.push(`${r.status()} ${r.url()}`);
+  });
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  try {
+    const res = await page.goto(`${server.url}/web/`);
+    await page.waitForTimeout(500);
+    await page.click('#startCam'); // 相机没有 stub，会报权限/设备错，但 UI 必须已经起来
+    await page.waitForTimeout(300);
+    check('/web/ 返回 200（Pages 的目录入口能打开）', res?.status() === 200, String(res?.status()));
+    check('/web/ 下的引用没有 404/5xx', bad.length === 0, bad.slice(0, 3).join(' | '));
+    check('模块脚本已执行（页面里有 #shutter / #root 内容）', (await page.$('#shutter')) !== null);
+    check('页面零 JS 运行时错误', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
+    const swReg = await page.evaluate(() => {
+      const href = document.querySelector('link[rel="manifest"]')?.getAttribute('href') || '';
+      return { manifest: href, sw: new URL('sw.js', new URL(href, location.href)).pathname };
+    });
+    check('Service Worker 解析到 /web/dist/sw.js（scope 正确）', swReg.sw === '/web/dist/sw.js', JSON.stringify(swReg));
+    const swRes = await page.goto(`${server.url}/web/dist/sw.js`);
+    check('/web/dist/sw.js 可访问（PWA 能注册）', swRes?.status() === 200, String(swRes?.status()));
+    const manRes = await page.goto(`${server.url}/web/dist/manifest.webmanifest`);
+    check('/web/dist/manifest.webmanifest 可访问', manRes?.status() === 200, String(manRes?.status()));
+  } catch (e) {
+    check('部署冒烟执行成功', false, e.message);
   } finally {
     await browser.close();
     await server.close();

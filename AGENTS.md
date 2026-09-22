@@ -15,8 +15,9 @@
    **例外（用户于 v0.7 明确要求，已生效）**：
    - 根 `index.html` 原型**保持不变**，仍然遵守本条约束。
    - `web/` 是**工程化版本**，明确允许构建与依赖（React 19 + TS 严格 + Vite + Tailwind + Zustand，单测 Vitest，依赖清单在 `web/package.json`），允许拆分模块。
-   - 两个入口的上线路径：根原型 → `https://tomorrowdolol.github.io/snapsaga-trip-prototype/`；web 版 → `.../web/`（Pages 从 main 分支提供，**没有 CI**，所以 `web/dist/` 必须 commit，`web/.gitignore` 故意不忽略它；以后可以把 Pages 源切成 Actions 再取消提交产物）。
-   - **改哪边**：真实功能/算法/队列改 `web/src/**`（有 53 个单测 + 75 项 e2e + 47 项 guard 守着），改完 `npm run verify` → build → 连 `dist` 一起提交；只想让线上原型立刻变一下、不碰构建，才改根 `index.html`（仍然要三同步）。两边都改时先改 `web/`。
+   - 两个入口的上线路径：根原型 → `https://tomorrowdolol.github.io/snapsaga-trip-prototype/`；web 版 → `.../web/`（Pages 从 main 分支提供，**没有 CI**，所以 `web/dist/` 与**构建生成的 `web/index.html`** 都必须 commit，`web/.gitignore` 故意不忽略它们；以后可以把 Pages 源切成 Actions 再取消提交产物）。
+   - ⚠️ `web/index.html` 是 `npm run build` 生成的入口页（Pages 的 `/web/` 只会找 index.html），**不要手改**；Vite 源入口是 `web/app.html`，改界面改它。改完必须 `npm run build` 让 `dist/` 与 `index.html` 一起刷新。
+   - **改哪边**：真实功能/算法/队列改 `web/src/**`（有 53 个单测 + 75 项 e2e + 59 项 guard 守着），改完 `npm run verify` → build → 连 `dist` 一起提交；只想让线上原型立刻变一下、不碰构建，才改根 `index.html`（仍然要三同步）。两边都改时先改 `web/`。
    - `web/src/domain/sun.ts` 是根原型太阳算法的逐行搬迁，**改它必须先跑 `npm test`（等价性测试会把 index.html 的原实现抽出来逐值比对）**。
 2. **本仓库公开**（GitHub Pages 免费版约束）：任何 API Key、凭证、内网地址、个人绝对路径不得入库。用户在原型里填的 Key 只存浏览器 localStorage，与仓库无关。
 3. **改 `index.html` 必须三同步**：页头 `TRIP PROTOTYPE vX.Y` 版本号 +1；`docs/iteration-log.md` 顶部追加记录（改动点 / 验证情况 / 已知问题变化）；有新问题登记为新 K 条目。
