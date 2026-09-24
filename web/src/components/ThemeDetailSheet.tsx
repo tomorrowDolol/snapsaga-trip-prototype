@@ -38,8 +38,7 @@ export function ThemeDetailSheet() {
             </div>
 
             <div className="sub sm td-meta" id="tdMeta">
-              素材 {t.sourceIds.length} 张 · {t.mode === 'merge' ? t.layout : '每张各自重绘'} · 强度{' '}
-              {t.strength.toFixed(2)} · 状态 {t.collecting ? '边拍边收中' : THEME_STATUS_LABEL[t.status]}
+              {t.sourceIds.length} 张 · {t.collecting ? '收集中' : THEME_STATUS_LABEL[t.status]}
             </div>
 
             <div className="h2">素材（{sources.length}/{THEME_MAX_SOURCES}）</div>
@@ -67,7 +66,7 @@ export function ThemeDetailSheet() {
               </div>
             ) : (
               <div className="td-empty" id="tdOutputsEmpty">
-                还在生成中（或尚未生成）。产出会**逐张**进相册「主题作品」，不是等整组。
+                还在生成中，产出会逐张出现。
               </div>
             )}
 
@@ -77,7 +76,7 @@ export function ThemeDetailSheet() {
               </button>
               {t.mode === 'unify' ? (
                 <button className="bt s violet" id="tdResume" onClick={() => resumeTheme(t.id)}>
-                  📷 继续边拍边收
+                  继续拍摄
                 </button>
               ) : null}
               <button className="bt g s" id="tdSave" onClick={() => saveThemeToAlbum(t.id)}>

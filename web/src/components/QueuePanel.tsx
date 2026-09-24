@@ -1,7 +1,6 @@
 import { fmtTime } from '../domain/media';
 import type { QueueTask } from '../domain/types';
 import { useObjectUrl } from '../hooks/useObjectUrl';
-import { queue } from '../store/queueRuntime';
 import { useAppStore } from '../store/useAppStore';
 
 const Q_LABEL: Record<QueueTask['status'], string> = {
@@ -82,17 +81,16 @@ export function QueuePanel() {
       <div id="queueMask" className={open ? 'show' : ''} onClick={closeQueue} />
       <div id="queuePanel" className={open ? 'show' : ''}>
         <div className="grab" />
-        <h3>✨ 生图队列</h3>
+        <h3>生成中</h3>
         <p className="desc" id="queueSummary">
-          并发上限 {queue.MAX} · 生成中 {counts.run} · 排队 {counts.queued} · 已完成 {counts.done} · 失败{' '}
-          {counts.failed}
+          {counts.run} 个处理中 · {counts.queued} 个等待
         </p>
         <div id="queueList">
           {items.length === 0 ? (
             <div className="queue-empty">
-              队列是空的
+              还没有任务
               <br />
-              <span>在「取景」拍一张，就会在后台排队生图（同时最多 {queue.MAX} 个）</span>
+              <span>拍照或创建主题后会出现在这里</span>
             </div>
           ) : (
             items.map((t) => <QueueItem key={t.id} task={t} position={positions.get(t.id) ?? null} />)
@@ -107,14 +105,14 @@ export function QueuePanel() {
               setView('album');
             }}
           >
-            看 AI 相册
+            看作品
           </button>
           <button className="mini ghost" id="btnQueueClear" onClick={clearFinished}>
-            清理已结束
+            清理
           </button>
         </div>
         <p className="desc" style={{ marginTop: 10 }}>
-          队列任务存在本机 IndexedDB，刷新页面后未完成的任务会自动继续。
+          未完成的任务会在刷新后继续。
         </p>
       </div>
     </>

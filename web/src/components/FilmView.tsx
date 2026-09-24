@@ -54,7 +54,6 @@ export function FilmView() {
   const toEdit = useAppStore((s) => s.toEdit);
   const openThemeCreate = useAppStore((s) => s.openThemeCreate);
   const openLightbox = useAppStore((s) => s.openLightbox);
-  const showToast = useAppStore((s) => s.showToast);
   const [filmKey, setFilmKey] = useFilmState();
   const [mode, setMode] = useFilmMode();
   const film = FILMS.find((f) => f.k === filmKey) ?? FILMS[0];
@@ -64,98 +63,77 @@ export function FilmView() {
     <>
       <div className="page-head row-between">
         <div>
-          <h1 className="h1">胶卷</h1>
-          <p className="sub" id="fsub">
-            36 张 · 已拍 {photos.length}
-          </p>
+          <h1 className="h1">照片</h1>
+          <p className="sub" id="fsub">{mode === 'cur' ? `${photos.length} 张原片` : `${album.length} 张作品`}</p>
         </div>
-        <button className="pl" onClick={() => showToast('导入手机相册 / 视频（原型未接）')}>
-          导入
-        </button>
       </div>
 
       <div className="sg" id="fsg">
         <button className={mode === 'cur' ? 'on' : ''} data-m="cur" onClick={() => setMode('cur')}>
-          当前胶卷
+          原片
         </button>
         <button className={mode === 'ai' ? 'on' : ''} data-m="ai" onClick={() => setMode('ai')}>
-          AI 归档
+          AI 作品
         </button>
       </div>
 
-      <div className="pd film-head">
-        <div className="canister" dangerouslySetInnerHTML={{ __html: filmCanisterSvg({ name: film.n, iso: film.iso, accent: film.ac }) }} />
-        <div className="grow">
-          <div className="t5" id="fn">
-            {film.n}
-          </div>
-          <div className="sub sm" id="fd">
-            {film.d}
-          </div>
-          <div className="chips">
-            <span className="pl mo" id="fiso">
-              ISO {film.iso}
-            </span>
-            <span className="pl">日光型</span>
-            <span className="pl g">已启用</span>
+      <details className="fold" id="filmSettings">
+        <summary>
+          <span>胶片</span>
+          <span className="mo">{film.n}</span>
+        </summary>
+        <div className="pd film-head">
+          <div className="canister" dangerouslySetInnerHTML={{ __html: filmCanisterSvg({ name: film.n, iso: film.iso, accent: film.ac }) }} />
+          <div className="grow">
+            <div className="t5" id="fn">{film.n}</div>
+            <div className="sub sm" id="fd">{film.d}</div>
+            <div className="chips">
+              <span className="pl mo" id="fiso">ISO {film.iso}</span>
+              <span className="pl">日光型</span>
+              <span className="pl g">已启用</span>
+            </div>
           </div>
         </div>
-      </div>
+        <div className="pd">
+          <div className="hs film-lib" id="films">
+            {FILMS.map((f) => (
+              <button key={f.k} className={`sk${f.k === filmKey ? ' on' : ''}`} data-f={f.k} onClick={() => setFilmKey(f.k)}>
+                <div className="canister sm" dangerouslySetInnerHTML={{ __html: filmCanisterSvg({ name: f.n, iso: f.iso, accent: f.ac }) }} />
+                <div className="nm"><span>{f.n}</span></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </details>
 
       {/* 胶片条：打孔 + 帧号 + 日期（设计稿 .stp） */}
-      <div className="stp">
+      <div className={`stp${list.length ? '' : ' empty'}`}>
         <div className="rw" id={mode === 'cur' ? 'filmGrid' : 'filmAiGrid'}>
           {list.length ? (
             list.map((p, i) => <FilmCell key={p.id} photo={p} index={i} />)
           ) : (
             <div className="sub strip-empty">
               {mode === 'cur'
-                ? '还没拍。回到「取景」按快门，照片会立刻出现在这里。'
-                : '还没有 AI 归档。生图完成后会自动出现在这里。'}
+                ? '还没有照片 · 去拍一张'
+                : '还没有 AI 作品'}
             </div>
           )}
         </div>
       </div>
 
-      <div className="pd row-actions">
-        <button className="bt" id="btnFilmToTheme" onClick={() => openThemeCreate(true)}>
-          ✨ 用这些照片建主题
-        </button>
-        <button className="bt g" id="btnToPola" onClick={() => (selected.length ? toPolaroid(selected[0]) : showToast('先在胶卷里点选照片'))}>
-          🤍 做拍立得
-        </button>
-      </div>
-      <div className="pd row-actions">
-        <button className="btn" id="btnClearSel" onClick={clearSelection}>
-          取消选择
-        </button>
-        <button className="btn teal" id="btnToEdit" onClick={() => (selected.length ? toEdit(selected[0]) : showToast('先在胶卷里点选照片'))}>
-          🎨 去修图
-        </button>
-        <button className="btn" id="btnFilmAlbum" onClick={() => openLightbox(selected[0] ?? list[0]?.id ?? '')}>
-          看大图
-        </button>
-      </div>
-
-      <div className="pd">
-        <div className="h2">胶片库</div>
-        <div className="hs film-lib" id="films">
-          {FILMS.map((f) => (
-            <button key={f.k} className={`sk${f.k === filmKey ? ' on' : ''}`} data-f={f.k} onClick={() => setFilmKey(f.k)}>
-              <div
-                className="canister sm"
-                dangerouslySetInnerHTML={{ __html: filmCanisterSvg({ name: f.n, iso: f.iso, accent: f.ac }) }}
-              />
-              <div className="nm">
-                <span>{f.n}</span>
-              </div>
-            </button>
-          ))}
+      {list.length ? (
+        <div className="pd row-actions film-actions">
+          <button className="bt" id="btnFilmToTheme" onClick={() => openThemeCreate(true)}>建主题</button>
+          {selected.length ? (
+            <>
+              <button className="bt g" id="btnToPola" onClick={() => toPolaroid(selected[0])}>拍立得</button>
+              <button className="btn teal" id="btnToEdit" onClick={() => toEdit(selected[0])}>修图</button>
+              <button className="btn" id="btnClearSel" onClick={clearSelection}>取消</button>
+            </>
+          ) : null}
+          <button className="btn" id="btnFilmAlbum" onClick={() => openLightbox(selected[0] ?? list[0]?.id ?? '')}>查看</button>
         </div>
-      </div>
-      <p className="pd sub foot-note">
-        选中的照片可以送去做拍立得 / 修图，或直接建成主题（多图上限 9 张）。全部存在本机 IndexedDB。
-      </p>
+      ) : null}
     </>
   );
 }

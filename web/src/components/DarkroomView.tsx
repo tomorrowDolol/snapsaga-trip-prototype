@@ -1,7 +1,6 @@
 import { QUEUE_MAX } from '../domain/genQueue';
 import { fmtTime } from '../domain/media';
 import type { QueueTask } from '../domain/types';
-import { queue } from '../store/queueRuntime';
 import { useAppStore } from '../store/useAppStore';
 import { ThumbImg } from './ThumbImg';
 
@@ -58,18 +57,16 @@ export function DarkroomView() {
       <div className="page-head">
         <h1 className="h1">暗房</h1>
         <p className="sub">
-          主题任务与单张生图共用同一条队列（并发 <span className="mo gold">{QUEUE_MAX}</span>）
+          {counts.run ? `${counts.run} 个处理中` : order.length ? '已完成' : '没有进行中的任务'}
         </p>
       </div>
 
-      <div className="pd">
+      <div className={`pd dark-slot-panel${running.length || queued.length ? '' : ' idle'}`}>
         <div className="cd">
           <div className="row-between">
-            <div className="t7">
-              显影槽 · 并发 <span className="mo gold">{QUEUE_MAX}</span>
-            </div>
+            <div className="t7">处理中</div>
             <div className="sub mo" id="ds">
-              运行 {counts.run} · 排队 {counts.queued} · 完成 {counts.done}
+              运行 {counts.run} · 排队 {counts.queued}
             </div>
           </div>
           <div className="sls" id="slots">
@@ -77,9 +74,7 @@ export function DarkroomView() {
               <Slot key={i} index={i} task={running[i] ?? null} />
             ))}
           </div>
-          <div className="sub sm note">
-            一个主题任务算**一个**任务（内部可能含 2–9 张）；第 {QUEUE_MAX + 1} 个任务起排队。槽位里的 <span className="mo">k/n</span> 是分张进度。
-          </div>
+          <span className="sr-only">一个主题任务算一个任务，内部可能含 2–9 张；第 {QUEUE_MAX + 1} 个任务起排队。</span>
         </div>
       </div>
 
@@ -136,25 +131,22 @@ export function DarkroomView() {
               );
             })
           ) : (
-            <div className="sub">队列是空的。拍几张，或到「主题」建一个主题。</div>
+            <div className="sub">还没有任务</div>
           )}
         </div>
       </div>
 
-      <div className="pd row-actions">
-        <button className="mini" id="btnDarkToAlbum" onClick={() => setView('album')}>
-          看相册
+      <div className="pd row-actions dark-actions">
+        <button className="mini" id="btnDarkToAlbum" onClick={() => setView(order.length ? 'album' : 'theme')}>
+          {order.length ? '看作品' : '去主题'}
         </button>
-        <button className="mini ghost" id="btnDarkClear" onClick={clearFinished}>
-          清理已结束
-        </button>
-        <button className="mini ghost" id="btnDarkOpenPanel" onClick={() => useAppStore.getState().openQueue()}>
-          队列详情
-        </button>
+        {items.length ? (
+          <>
+            <button className="mini ghost" id="btnDarkClear" onClick={clearFinished}>清理</button>
+            <button className="mini ghost" id="btnDarkOpenPanel" onClick={() => useAppStore.getState().openQueue()}>详情</button>
+          </>
+        ) : null}
       </div>
-      <p className="pd sub foot-note">
-        并发上限 {queue.MAX}（与引擎一致）· 队列存在本机 IndexedDB，刷新后未完成的任务会自动继续。
-      </p>
     </>
   );
 }

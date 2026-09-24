@@ -38,8 +38,8 @@ export function PolaroidView() {
   return (
     <>
       <div className="page-head">
-        <h2>🤍 拍立得工坊</h2>
-        <p>白框 + 颗粒 + 日期戳 + 一句手写注记，10 秒显影出片。</p>
+        <h2>拍立得</h2>
+        <p>给照片加一份留念</p>
       </div>
       <div id="polaStage">
         <div id="polaBox" className={developing ? 'polaroid-developing' : 'polaroid-developed'}>
@@ -61,15 +61,13 @@ export function PolaroidView() {
               </button>
             ))}
           </div>
-          <button className="dice" id="btnNoteDice" title="换一句" onClick={() => s.rollNote()}>
-            🎲
-          </button>
+          <button className="dice" id="btnNoteDice" title="换一句" onClick={() => s.rollNote()}>换一句</button>
         </div>
         <div className="row">
           <label>注记</label>
           <input
             id="polaNote"
-            placeholder="写一句，或点骰子来一句"
+            placeholder="写一句话（可选）"
             value={s.polaNote}
             onChange={(e) => s.setPolaNote(e.target.value)}
           />
@@ -79,7 +77,7 @@ export function PolaroidView() {
             换显影
           </button>
           <button className="btn primary" id="btnPolaSave" onClick={() => void s.savePolaroid()}>
-            保存 / 分享
+            保存
           </button>
         </div>
       </div>

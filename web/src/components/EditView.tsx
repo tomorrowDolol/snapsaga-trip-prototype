@@ -37,12 +37,12 @@ export function EditView() {
   return (
     <>
       <div className="page-head">
-        <h2>🎨 主题修图</h2>
-        <p>本地滤镜离线即用；填了 API Key（设置里）可调 gpt-image-2 真重绘。</p>
+        <h2>修图</h2>
+        <p>选择一种风格</p>
       </div>
       <div id="editStage">
         <div className="empty" id="editEmpty" style={{ display: photo ? 'none' : 'flex' }}>
-          <div className="big">🎨</div>先在「胶卷」选一张照片
+          <div className="big">＋</div>先选择一张照片
         </div>
         {photo && <canvas id="editCanvas" ref={canvasRef} />}
       </div>
@@ -54,7 +54,7 @@ export function EditView() {
           <i />
         </div>
         <div id="aiBusyText" style={{ fontSize: 13, color: 'var(--soft)' }}>
-          暗房里正在重绘…约 20–60 秒
+          处理中…
         </div>
       </div>
       <div className="edit-bar">
@@ -86,10 +86,10 @@ export function EditView() {
         </div>
         <div className="edit-actions">
           <button className="btn" id="btnEditSave" onClick={() => void s.saveEditResult()}>
-            保存结果
+            保存
           </button>
           <button className="btn teal" id="btnEditAI" onClick={() => void s.runAiRedraw()}>
-            ✨ AI 重绘
+            AI 重绘
           </button>
         </div>
       </div>

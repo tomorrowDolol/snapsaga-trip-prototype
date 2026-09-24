@@ -18,9 +18,9 @@ function AlbumCell({ photo }: { photo: PhotoRec }) {
 }
 
 const GROUPS: Array<{ k: AlbumGroup; label: string }> = [
-  { k: 'raw', label: '原始胶卷' },
-  { k: 'ai', label: 'AI 归档' },
-  { k: 'theme', label: '主题作品' },
+  { k: 'raw', label: '原片' },
+  { k: 'ai', label: 'AI' },
+  { k: 'theme', label: '主题' },
 ];
 
 /** 相册：原始 / AI 归档 / 主题作品（主题作品里合成作品与同风格组分开看） */
@@ -31,20 +31,22 @@ export function AlbumView() {
   const setAlbumGroup = useAppStore((s) => s.setAlbumGroup);
   const list = albumPhotos({ photos, album, albumGroup: group });
   const split = themeAlbumSplit(album);
-  const themeCount = album.filter((p) => !!p.theme).length;
-
   return (
     <>
       <div className="page-head">
-        <h1 className="h1">相册</h1>
-        <p className="sub" id="asub">
-          原始 {photos.length} · AI 归档 {album.length} · 主题作品 {themeCount}
-        </p>
+        <h1 className="h1">作品</h1>
+        <p className="sub" id="asub">{list.length} 张</p>
       </div>
 
       <div className="sg" id="albumSeg">
         {GROUPS.map((g) => (
-          <button key={g.k} className={group === g.k ? 'on' : ''} data-a={g.k} onClick={() => setAlbumGroup(g.k)}>
+          <button
+            key={g.k}
+            className={group === g.k ? 'on' : ''}
+            data-a={g.k}
+            title={g.k === 'theme' ? '主题作品' : undefined}
+            onClick={() => setAlbumGroup(g.k)}
+          >
             {g.label}
           </button>
         ))}
@@ -54,7 +56,7 @@ export function AlbumView() {
         {group === 'theme' ? (
           <>
             <div className="gsec" id="secMerge">
-              合成作品 · {split.merges.length} 张（N 张 → 1 张）
+              合成 · {split.merges.length} 张
             </div>
             {split.merges.length ? (
               split.merges.map((p) => <AlbumCell key={p.id} photo={p} />)
@@ -62,7 +64,7 @@ export function AlbumView() {
               <div className="gsec empty-sub">还没有合成作品</div>
             )}
             <div className="gsec" id="secUnify">
-              同风格组 · {split.unify.length} 张（N 张 → N 张）
+              同风格 · {split.unify.length} 张
             </div>
             {split.unify.length ? (
               split.unify.map((p) => <AlbumCell key={p.id} photo={p} />)
@@ -74,7 +76,7 @@ export function AlbumView() {
           list.map((p) => <AlbumCell key={p.id} photo={p} />)
         ) : (
           <div className="sub gc-empty">
-            {group === 'raw' ? '还没有照片。去「取景」拍第一张。' : '还没有 AI 生图。拍一张就会在后台排队。'}
+            {group === 'raw' ? '还没有照片' : '还没有作品'}
           </div>
         )}
       </div>

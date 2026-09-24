@@ -124,6 +124,7 @@ try {
     await sleep(150);
     await page.click('#btnThemeNew');
     await sleep(200);
+    await page.click('#promptIdeasToggle');
 
     // 词库点选拼装 + 实时预览 + 质量提示
     await page.click('#pBuild button[data-w="富士胶片"]');
@@ -202,6 +203,7 @@ try {
     await sleep(150);
     await page.click('#btnThemeNew');
     await sleep(200);
+    await page.click('#promptIdeasToggle');
     await page.click('#modeBox .m[data-m="unify"]');
     await sleep(100);
     check('切到统一风格后隐藏「合成布局」', await page.evaluate(() => document.querySelector('#mergeOpt').style.display === 'none'));
@@ -304,6 +306,7 @@ try {
     await sleep(150);
     await page.click('#btnThemeNew');
     await sleep(200);
+    await page.click('#promptIdeasToggle');
     check('选图区列出全部 10 张', (await cells(page, '#pick .pk[data-id]')) === 10);
 
     await page.click('#pickAll');

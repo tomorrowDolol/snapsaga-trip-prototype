@@ -107,15 +107,9 @@ export function CameraView() {
           {/* 相机没起来时用场景插画当取景底（设计稿的 8 张内联 SVG，同一套画法） */}
           <div className="ph-art" dangerouslySetInnerHTML={{ __html: sceneArtSvg(s.sceneIdx) }} />
           <div className="ph-body">
-            <div className="big">📷</div>
-            <p>
-              构图网格、水平仪、黄金时刻提醒——出游时帮你「拍对」。
-              <br />
-              全部在本机运行，照片不上传。
-            </p>
-            <button id="startCam" onClick={() => void s.startCamera()}>
-              打开相机
-            </button>
+            <div className="cam-mark" aria-hidden="true" />
+            <p>记录此刻。照片只保存在本机。</p>
+            <button id="startCam" onClick={() => void s.startCamera()}>开始拍摄</button>
           </div>
         </div>
 
@@ -135,7 +129,7 @@ export function CameraView() {
         {/* 场景信息（左上角一行小字） */}
         <div className="vtop">
           <span className="vb gold" id="vtl">
-            {scene.n} · {EN[s.sceneIdx]}
+            {scene.n}
           </span>
         </div>
 
@@ -144,22 +138,6 @@ export function CameraView() {
           style={{ display: s.camReady && s.gridMode !== 'off' ? 'block' : 'none' }}
           dangerouslySetInnerHTML={{ __html: gridSVG(s.gridMode) }}
         />
-
-        {/* 直方图（由场景派生，纯展示） */}
-        <div className="hist" id="hist" style={{ display: s.camReady ? 'flex' : 'none' }}>
-          {Array.from({ length: 14 }, (_, i) => (
-            <i key={i} style={{ height: `${18 + Math.round(Math.abs(Math.sin(i * 0.9 + s.sceneIdx)) * 72)}%` }} />
-          ))}
-        </div>
-
-        {/* 太阳轨迹（黄金时刻） */}
-        <svg className="sarc" viewBox="0 0 92 46" style={{ display: s.camReady ? 'block' : 'none' }}>
-          <path d="M4 42 Q46 -8 88 42" stroke="rgba(233,180,76,.45)" strokeWidth={1.2} fill="none" strokeDasharray="3 3" />
-          <circle cx="66" cy="14" r="4.5" fill="#FFD98A" />
-          <text x="52" y="9" fill="#E9B44C" fontSize={7} fontFamily="monospace">
-            黄金时刻
-          </text>
-        </svg>
 
         {/* 水平仪 */}
         <div className="lv" id="lv" style={{ opacity: s.levelOn ? 1 : 0 }}>
@@ -171,18 +149,9 @@ export function CameraView() {
         </div>
 
         {/* 构图提示：单行、自动淡出、点取景画面再显示 */}
-        <div className="tp" id="tp" style={{ opacity: hintOn ? 1 : 0 }}>
+        <div className="tp" id="tp" style={{ opacity: hintOn ? 1 : 0, visibility: s.camReady ? 'visible' : 'hidden' }}>
           <b>{scene.lead}</b>
           {scene.rest}
-        </div>
-
-        {/* 曝光刻度（细线） */}
-        <div className="evr" id="evr" style={{ display: s.camReady ? 'flex' : 'none' }}>
-          <b />
-          <b />
-          <em id="evVal">{ev > 0 ? '+' + ev : ev}</em>
-          <b />
-          <b />
         </div>
 
         {/* 右上角半透明小圆钮：网格 / 水平仪 / 队列 / 设置（AppHeader 在取景页隐藏，入口不丢） */}
@@ -218,9 +187,7 @@ export function CameraView() {
         {/* 左下角一行小字：ISO + 焦距 + **取图方式**（点开抽屉）。取图方式直接决定画质，
             必须拍照时就看得见：真拍照 = 金，抓帧 = 橙色警示。 */}
         <button id="camHudInfo" title="相机参数 · 取图方式" onClick={s.toggleCamSheet}>
-          <span className="mo">
-            ISO {ISO[s.sceneIdx]} · {focal}mm · f/1.8 · {SHUTTER[s.sceneIdx]}
-          </span>
+          <span className="mo">{focal}mm</span>
           <span className={`mo shot${mark.warn ? ' warn' : ''}`} id="camHudInfoShot" data-kind={mark.kind}>
             {mark.label}
           </span>
@@ -257,19 +224,22 @@ export function CameraView() {
           {s.photos.slice(0, 6).map((p) => (
             <RecentCell key={p.id} photo={p} />
           ))}
-          <div className="df add" id="recentAdd" onClick={() => s.openThemeCreate(true)} title="用这些照片建主题">
-            ＋
-          </div>
-          {!s.photos.length ? <div className="sub strip-hint">拍下的照片会实时出现在这里</div> : null}
+          {s.photos.length ? (
+            <div className="df add" id="recentAdd" onClick={() => s.openThemeCreate(true)} title="用这些照片建主题">
+              ＋
+            </div>
+          ) : (
+            <div className="sub strip-hint">拍下的照片会出现在这里</div>
+          )}
         </div>
 
         <div id="shutterRow">
           <button className="side-btn" id="btnCamSheet" onClick={s.toggleCamSheet}>
-            <span className="ic">📷</span>相机
+            <span className="ic">⌄</span>控制
           </button>
           <button id="shutter" title="拍照" onClick={() => void s.capture()} />
           <button className="side-btn" id="btnSwitch" onClick={() => void s.switchCamera()}>
-            <span className="ic">🔄</span>翻转
+            <span className="ic">↻</span>翻转
           </button>
         </div>
       </div>
@@ -279,5 +249,3 @@ export function CameraView() {
 
 const ISO = [400, 200, 400, 400, 800, 200, 200, 200];
 const SHUTTER = ['1/125', '1/250', '1/500', '1/60', '1/15', '1/400', '1/200', '1/80'];
-/** 场景英文名（设计稿 SC 的 en 字段） */
-const EN = ['Everyday', 'Lake', 'Alpine', 'Street', 'Night', 'Coast', 'Portrait', 'Feast'];

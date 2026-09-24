@@ -5,7 +5,7 @@ import { useAppStore, type View } from '../store/useAppStore';
 const TABS: Array<{ v: View | 'set'; label: string; paths: string[] }> = [
   {
     v: 'cam',
-    label: '取景',
+    label: '拍摄',
     paths: ['M3 7h18v12a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 19z', 'M12 16.4a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8z', 'M8 7l1.4-2h5.2L16 7'],
   },
   {
@@ -15,7 +15,7 @@ const TABS: Array<{ v: View | 'set'; label: string; paths: string[] }> = [
   },
   {
     v: 'film',
-    label: '胶卷',
+    label: '照片',
     paths: ['M3 5h18v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M7 5v14M17 5v14M10 9h4M10 12h4M10 15h4'],
   },
   {
@@ -25,7 +25,7 @@ const TABS: Array<{ v: View | 'set'; label: string; paths: string[] }> = [
   },
   {
     v: 'album',
-    label: '相册',
+    label: '作品',
     paths: ['M3 4h18v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M3 15l4.5-4.5 3.5 3.5 3-3L21 16', 'M8.5 10.4a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8z'],
   },
   {

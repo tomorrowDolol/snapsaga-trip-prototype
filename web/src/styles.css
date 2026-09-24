@@ -385,6 +385,9 @@ main{flex:1 1 auto; overflow:hidden; position:relative}
 .stp::after{bottom:2px}
 .stp .rw{display:flex; gap:10px; overflow-x:auto; padding:8px 16px 4px; scrollbar-width:none}
 .stp .rw::-webkit-scrollbar{display:none}
+.stp.empty{background:none; border:0; padding:8px 0; margin-top:8px}
+.stp.empty::before,.stp.empty::after{display:none}
+.stp.empty .rw{padding:6px 16px}
 .fm{flex:0 0 auto; width:150px}
 .fm .no{font-family:var(--mo); font-size:10px; color:var(--gold); display:flex; justify-content:space-between; margin-bottom:5px}
 .fm .im{width:150px; height:112px; border-radius:5px; overflow:hidden; position:relative; border:1px solid rgba(255,255,255,.12); background:#0b0f10}
@@ -571,3 +574,73 @@ nav.bottom .bdg.show{display:flex}
 
 /* ===== React 挂载点 ===== */
 #root{display:flex; flex-direction:column; flex:1 1 auto; min-height:0}
+
+.build-label{display:none}
+header.app{padding-top:calc(env(safe-area-inset-top) + 8px); padding-bottom:8px; border-bottom-color:rgba(255,255,255,.06)}
+header.app .logo{font-size:15px; letter-spacing:.5px}
+header.app .right{gap:0}
+.page-head{padding:16px 16px 8px}
+.page-head p{margin-top:2px; font-size:11.5px}
+.h2{margin-top:16px; margin-bottom:7px; letter-spacing:1.2px}
+.foot-note{display:none}
+.cam-mark{width:30px; height:30px; border:1px solid rgba(255,255,255,.7); border-radius:50%; position:relative}
+.cam-mark::after{content:""; position:absolute; inset:7px; border-radius:50%; border:1px solid rgba(255,255,255,.55)}
+.cam-mark::before{content:""; position:absolute; width:12px; height:1px; left:9px; top:-5px; background:rgba(255,255,255,.7)}
+#camPlaceholder p{max-width:220px; color:#d6e0e0; font-size:12px}
+#startCam{padding:11px 24px; font-size:14px}
+.hist,.sarc,.evr{display:none!important}
+#camHudInfo{gap:7px; font-size:10px; background:rgba(10,14,15,.38); border-color:rgba(255,255,255,.09)}
+#camHudInfo .shot{padding-left:7px; border-left:1px solid rgba(255,255,255,.22)}
+.side-btn{font-size:10px}
+.side-btn .ic{font-size:19px; margin-bottom:1px}
+.strip-hint{font-size:10.5px}
+nav.bottom{padding-top:7px; background:rgba(6,8,9,.98)}
+nav.bottom button{gap:3px; font-size:9px}
+nav.bottom button svg{width:19px; height:19px}
+.tcard{border-color:rgba(255,255,255,.07); background:rgba(20,24,26,.72); border-radius:12px}
+.tcard .top{padding:10px}
+.tcard .ic{width:32px; height:32px; border-radius:9px; font-size:12px; font-weight:800}
+.tcard .t6{font-size:10.5px}
+.tcard .tmeta{padding:0 10px 8px; font-size:10.5px}
+.insp{padding-top:5px}
+.insp button{font-size:11px; padding:5px 9px}
+.prompt-tools{display:flex; gap:7px; margin:8px 0 10px}
+.prompt-tools .pl{padding:6px 11px}
+.prompt-tools .pl:first-child{margin-right:auto}
+.theme-advanced{border-top:1px solid var(--ln); border-bottom:1px solid var(--ln); margin:4px 0 12px}
+.theme-advanced summary{list-style:none; cursor:pointer; padding:9px 0; color:var(--dim); font-size:11px}
+.theme-advanced summary::-webkit-details-marker{display:none}
+.theme-advanced summary::after{content:"＋"; float:right; color:var(--dim2); font-size:14px}
+.theme-advanced[open] summary::after{content:"−"}
+.theme-advanced .fi{margin:0 0 12px}
+.mode.compact{gap:7px; margin:10px 0}
+.mode.compact .m{padding:10px 11px; border-radius:11px}
+.mode.compact .m .t7{font-size:12px; margin-top:0}
+.mode.compact .m .t8{font-size:10px; margin-top:2px}
+.mode.compact .m .ck{width:13px; height:13px; top:9px; right:9px}
+.mode.compact .m.on .ck{box-shadow:inset 0 0 0 3px var(--gold)}
+.fold{margin:10px 16px 0; border-top:1px solid var(--ln); border-bottom:1px solid var(--ln)}
+.fold summary{display:flex; align-items:center; justify-content:space-between; gap:10px; list-style:none; padding:11px 0; color:var(--fg); font-size:12px; font-weight:700; cursor:pointer}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary::after{content:"＋"; color:var(--dim); font-size:15px; font-weight:400}
+.fold[open] summary::after{content:"−"}
+.fold .film-head{padding:0 0 8px}
+.fold>.pd{padding-left:0; padding-right:0}
+.fold .film-lib{padding-bottom:9px}
+.film-actions{padding-top:12px; gap:7px}
+.film-actions .bt,.film-actions .btn{padding:10px 12px; font-size:12px; flex:1 1 auto}
+.film-actions .btn{min-width:0}
+.dark-idle{padding:18px 0 4px; color:var(--dim2); font-size:11px}
+.dark-slot-panel.idle{display:none}
+.dark-actions{padding-top:12px}
+#darkQueue:has(.sub:only-child){padding:10px 0; background:none; border-color:transparent}
+.sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+#settings h3,#queuePanel h3{font-size:15px; margin-top:16px}
+#settings p.desc,#queuePanel p.desc{font-size:11px; margin-bottom:7px}
+#settings .field{margin-bottom:7px}
+#camSheet .scene-head{margin-top:8px}
+#camSheet .scene-head .hint{display:none}
+#camSheet .scene-hint-full{font-size:11px}
+#camSheet .h2{font-size:11px}
+#camSheet .dgnote{font-size:10px}
+.dice{width:auto; padding:0 9px; font-size:11px}

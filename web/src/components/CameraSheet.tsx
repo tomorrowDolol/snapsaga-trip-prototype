@@ -119,16 +119,14 @@ export function CameraSheet({ focal, setFocal, ev, cycleEv, flashMode, cycleFlas
         <div className="camsheet-head" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <div className="grab" />
           <div className="camsheet-title">
-            相机 · 场景与参数
-            <span className="mo">下拉关闭</span>
+            相机控制
+            <span className="mo">下拉收起</span>
           </div>
         </div>
 
         <div className="camsheet-body">
           {/* 场景相机（设计稿 .hs：8 台，内联 SVG 插画 + 机身造型） */}
-          <div className="h2 scene-head">
-            场景相机 <span className="hint">8 台 · 横滑</span>
-          </div>
+          <div className="h2 scene-head">场景</div>
           {/* 取景器里的构图提示是单行且会自动淡出（不占构图），完整文案放在这里随时可查 */}
           <div className="scene-hint-full" id="hintFull">
             <b>{SCENES[sceneIdx].lead}</b>
@@ -169,23 +167,23 @@ export function CameraSheet({ focal, setFocal, ev, cycleEv, flashMode, cycleFlas
               {exposure}
             </span>
             <button className="c" id="btnEv" title="曝光补偿" onClick={cycleEv}>
-              ⚡ 曝光 {ev > 0 ? '+' + ev : ev}
+              曝光 {ev > 0 ? '+' + ev : ev}
             </button>
             <button className="c" id="btnFlash" title="闪光灯" onClick={cycleFlash}>
-              ☀ 闪光 {flashMode === 'auto' ? '自动' : flashMode === 'on' ? '开' : '关'}
+              闪光 {flashMode === 'auto' ? '自动' : flashMode === 'on' ? '开' : '关'}
             </button>
             <button className="c" id="btnTimer" title="定时" onClick={() => useAppStore.getState().showToast('3 秒定时（原型只做提示）')}>
-              ⏱ 定时
+              定时
             </button>
             <button className={`c${levelOn ? ' on' : ''}`} id="btnLevel" title="水平仪" onClick={() => void toggleLevel()}>
-              ≡ 水平仪
+              水平仪
             </button>
           </div>
 
           {/* 拍完自动生图 + 胶片与风格 chips */}
           <div id="genBar">
             <button id="genToggle" className={genAuto && aiReady ? 'on' : ''} onClick={toggleGenAuto}>
-              {!genAuto ? '✨ 拍完不生图' : aiReady ? '✨ 拍完自动生图' : '✨ 未配置 AI'}
+              {!genAuto ? '拍后不生成' : aiReady ? '拍后自动生成' : '未配置 AI'}
             </button>
             <div id="genStyles" className={genAuto ? '' : 'off'}>
               {STYLES.map((st) => (
@@ -203,7 +201,6 @@ export function CameraSheet({ focal, setFocal, ev, cycleEv, flashMode, cycleFlas
 
           {/* 黄金时刻：日出/日落/窗口/倒计时，以及「未设置地点」的引导态 */}
           <div id="sunBar">
-            <span className="ico">🌅</span>
             <div className="grow">
               <div className="t1" id="sunTitle">
                 {sunTitle}

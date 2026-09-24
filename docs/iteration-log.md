@@ -4,7 +4,7 @@
 每版的详细验证记录、实测数字表、已解决 K 条目原文在归档里：[`iteration-history.md`](iteration-history.md)。
 文档分工见 [`../README.md#文档地图`](../README.md#文档地图)；改完文档跑 `node scripts/check-docs.mjs`。
 
-## 当前状态（2026-09-22 核对）
+## 当前状态（2026-09-24 核对）
 
 两个入口**同源同库**（同一个 IndexedDB 库 `snapsaga`、同一批 localStorage 键，互相读得懂对方的数据），
 功能与数据兼容细节见 [`../web/README.md`](../web/README.md)。
@@ -12,9 +12,9 @@
 | 入口 | 版本 | 技术栈 | 线上地址 |
 |------|------|--------|----------|
 | 根 `index.html` | **v0.6（冻结）** | 单文件 HTML/CSS/JS，无构建、无依赖 | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/> |
-| `web/` | **v0.10** | React 19 + TS 严格 + Vite + Tailwind + Zustand | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> |
+| `web/` | **v0.11** | React 19 + TS 严格 + Vite + Tailwind + Zustand | <https://tomorrowdolol.github.io/snapsaga-trip-prototype/web/> |
 
-<!-- check-docs: root-version=v0.6 web-version=v0.10 —— 上面两个版本号由 scripts/check-docs.mjs 与页头比对 -->
+<!-- check-docs: root-version=v0.6 web-version=v0.11 —— 上面两个版本号由 scripts/check-docs.mjs 与页头比对 -->
 
 - **部署**：Pages 由 GitHub Actions 发布（`build_type: workflow`），推送 `main` 即构建 + 门禁 + 发布。
   站点形状（`assemble-site.mjs`、`/web/` 入口、`dist` 不提交）**只在 [`../README.md#部署形状`](../README.md#部署形状) 写一份**。
@@ -64,6 +64,13 @@
 
 ## 版本摘要
 详细验证记录与数据表在 [`iteration-history.md`](iteration-history.md)（每版一节）。
+
+### v0.11 · 界面减法（主路径只留一个决定）— 2026-09-24
+- 做：`web/` 全面收短文案与信息层级：去掉非拍摄页重复页头、统计卡、说明脚注和空状态装饰；导航改成「拍摄 / 主题 / 照片 / 暗房 / 作品」，设置仍从固定入口进入；相册、队列、设置、拍立得、修图统一改成短标签和单一主动作。
+- 取景：保留快门、取图方式和必要入口，移除直方图 / 太阳弧 / 曝光刻度等装饰读数；未打开相机时只显示「记录此刻」，控制项继续收在相机抽屉。
+- 主题：主页面移除统计与产出说明；新建主题先显示「主题 → 产出方式 → 照片」，32 个灵感词与布局 / 强度改为按需展开，不改变提示词拼装、两种产出和边拍边收。
+- 照片 / 暗房：胶片库改为折叠区；没有任务时不渲染 3×3 空槽；选择照片后才出现拍立得 / 修图等动作。根 `index.html` 未改，仍为 v0.6。
+- 验：构建、162 单测、231 e2e、136 guard 全绿；新增主题验收步骤覆盖「灵感」按需展开；未新增 K 条目。
 
 ### v0.10 · 相机取图方式可见 + 降级不再锁死（真拍照 / 抓帧一眼可见）— 2026-09-23
 - 做：修一个**真缺陷** —— 以前 `takePhoto` 失败一次就把 `still` 永久置 false，整个会话后面每张都静默变成抓帧，用户无从察觉画质掉了；现在**每张都先试 `takePhoto`**，单次失败只回落**本次**，**连续失败 3 次**（`STILL_FAIL_LIMIT`，可配置）才标记「仅抓帧」，并在降级那一刻用 **toast 明确告知一次**（指路「重新检测」），成功一次即把计数归零。可见性：取景页左下角小字加**取图方式标记**（`真拍照` 金 / `抓帧` 橙警示），相机抽屉新增**「相机诊断」区**（`#camDiag`：ImageCapture 存在性与可用性 / 最近一次 takePhoto 的结果与耗时 ms / 实际分辨率 `getSettings()` / 当前取图方式 / 连续失败 n/3）与**「重新检测」**按钮（重置降级状态并当场再试一次 takePhoto）。
